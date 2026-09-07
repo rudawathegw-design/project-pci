@@ -532,6 +532,7 @@ function toast(msg,bad){
   t.textContent=msg; t.className='show'+(bad?' bad':'');
   clearTimeout(window._tt); window._tt=setTimeout(()=>{t.className='';},bad?6000:2600);
 }
+const ovKey=(sheet,cell)=>String(sheet).trim()+'!'+cell;   // must match the worker
 async function loadOverlay(){
   const pw=sessionStorage.getItem('pci_pw')||'';
   try{
@@ -561,7 +562,7 @@ async function saveCell(i,field,value,el){
       if(el){ el.disabled=false; if(el.tagName==='SELECT') el.value=prev; }
       toast('Save failed: '+(d.message||('HTTP '+r.status)),1); return;
     }
-    OVERLAY[f._sheet+'!'+col+f._row]={sheet:f._sheet,cell:col+f._row,field,value};
+    OVERLAY[ovKey(f._sheet,col+f._row)]={sheet:f._sheet.trim(),cell:col+f._row,field,value};
     f[field]=value; if(field==='link') f.jira=value;
     if(el) el.disabled=false;
     updatePendingUI(); renderWorklist();
@@ -671,11 +672,13 @@ function renderGaps(){
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
   WL_ALL.forEach((f,i)=>f._i=i);
-  // lay pending edits over the values read from Box so everyone sees them now
+  // lay pending edits over the values read from Box so everyone sees them now.
+  // Keys use the TRIMMED sheet name to match how the worker stores them —
+  // "HR & Access Control " has a trailing space in the workbook.
   WL_ALL.forEach(f=>{
-    const a=f._cFib&&OVERLAY[f._sheet+'!'+f._cFib+f._row];
+    const a=f._cFib&&OVERLAY[ovKey(f._sheet,f._cFib+f._row)];
     if(a){ f.fib_status=a.value; f._pendFib=true; }
-    const b=f._cLink&&OVERLAY[f._sheet+'!'+f._cLink+f._row];
+    const b=f._cLink&&OVERLAY[ovKey(f._sheet,f._cLink+f._row)];
     if(b){ f.jira=b.value; f._pendLink=true; }
   });
   updatePendingUI();
