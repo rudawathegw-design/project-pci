@@ -496,9 +496,10 @@ function parseGaps(wb){
         if(/atlassian\.net\/browse\//i.test(v)) lk[j]=(lk[j]||0)+1;
         else if(STAT.has(nk(v))) st[j]=(st[j]||0)+1;
       }
-      const best=m=>{ let b=-1,n=0; for(const j in m){ if(m[j]>n){n=m[j];b=+j;} } return n>=2?b:-1; };
-      if(ci.fib<0){ const j=best(st); if(j>=0) ci.fib=j; }
-      if(ci.link<0){ const j=best(lk); if(j>=0) ci.link=j; }
+      // a jira browse URL is unambiguous on its own; status words need 2+ to be safe
+      const best=(m,min)=>{ let b=-1,n=0; for(const j in m){ if(m[j]>n){n=m[j];b=+j;} } return n>=min?b:-1; };
+      if(ci.fib<0){ const j=best(st,2); if(j>=0) ci.fib=j; }
+      if(ci.link<0){ const j=best(lk,1); if(j>=0) ci.link=j; }
     }
     // Columns already rendered in their own place; everything else that carries
     // text (Client Comments, Additional Comments, Evidences1/2 …) is surfaced
