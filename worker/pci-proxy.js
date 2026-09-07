@@ -55,8 +55,9 @@ function cellText(cx, shared) {
 }
 // Borrow the style of an existing cell in the same column that already holds
 // this value, so "Done" keeps its green, "In progress" its amber, etc.
+const normVal = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
 function styleForValue(sheetXml, shared, col, value) {
-  const want = String(value).trim().toLowerCase(); if (!want) return null;
+  const want = normVal(value); if (!want) return null;
   const re = new RegExp(`<c\\s[^>]*r="${col}\\d+"`, "g"); let m;
   while ((m = re.exec(sheetXml))) {
     const start = m.index, gt = sheetXml.indexOf(">", start); if (gt < 0) continue;
@@ -64,7 +65,7 @@ function styleForValue(sheetXml, shared, col, value) {
     if (sheetXml[gt - 1] === "/") end = gt + 1;
     else { const c = sheetXml.indexOf("</c>", gt); end = c < 0 ? gt + 1 : c + 4; }
     const cx = sheetXml.slice(start, end);
-    if (cellText(cx, shared).trim().toLowerCase() === want) {
+    if (normVal(cellText(cx, shared)) === want) {
       const sm = /\ss="(\d+)"/.exec(cx); if (sm) return sm[1];
     }
   }

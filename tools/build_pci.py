@@ -607,8 +607,10 @@ function _cellText(cx,shared){
 }
 // Style index of an existing cell in the same column holding the same value —
 // that's how "Done" keeps its green, "In progress" its amber, etc.
+// "On Hold" / "ON-HOLD" / "on hold" are the same status as far as colour goes.
+const _norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 function _styleForValue(sheetXml,shared,col,value){
-  const want=String(value).trim().toLowerCase(); if(!want) return null;
+  const want=_norm(value); if(!want) return null;
   const re=new RegExp('<c\\s[^>]*r="'+(col||'[A-Z]+')+'\\d+"','g'); let m;
   while((m=re.exec(sheetXml))){
     const start=m.index, gt=sheetXml.indexOf('>',start); if(gt<0) continue;
@@ -616,7 +618,7 @@ function _styleForValue(sheetXml,shared,col,value){
     if(sheetXml[gt-1]==='/') end=gt+1;
     else { const c=sheetXml.indexOf('</c>',gt); end=c<0?gt+1:c+4; }
     const cx=sheetXml.slice(start,end);
-    if(_cellText(cx,shared).trim().toLowerCase()===want){
+    if(_norm(_cellText(cx,shared))===want){
       const sm=/\ss="(\d+)"/.exec(cx); if(sm) return sm[1];
     }
   }
@@ -751,10 +753,14 @@ function renderGaps(){
     if(b){ f.jira=b.value; f._pendLink=true; }
   });
   updatePendingUI();
-  // FIB status choices = whatever the workbook already uses, plus the usual set
-  const seen=new Set(WL_ALL.map(f=>(f.fib_status||'').trim()).filter(Boolean));
-  ['Done','In Progress','On Hold','Not Started'].forEach(v=>{ if(![...seen].some(s=>s.toLowerCase()===v.toLowerCase())) seen.add(v); });
-  FIB_OPTS=[''].concat([...seen].sort());
+  // FIB status choices = the workbook's own wording, de-duplicated across
+  // spelling variants ("In Progress"/"In progress"), keeping the commonest.
+  const counts={};
+  WL_ALL.forEach(f=>{ const v=(f.fib_status||'').trim(); if(!v) return;
+    const k=_norm(v); (counts[k]=counts[k]||{}); counts[k][v]=(counts[k][v]||0)+1; });
+  ['Done','In Progress','On Hold','Not Started'].forEach(v=>{ const k=_norm(v); if(!counts[k]) counts[k]={[v]:0}; });
+  FIB_OPTS=[''].concat(Object.values(counts)
+    .map(m=>Object.entries(m).sort((a,b)=>b[1]-a[1])[0][0]).sort());
   // area filter options
   const sel=document.getElementById('f-area');
   sel.innerHTML='<option value="">All areas ('+WL_ALL.length+')</option>'+
