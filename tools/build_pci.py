@@ -26,9 +26,9 @@ EVIDENCE = [
     {"k": "whole",     "t": "Full evidence set",  "s": "Complete shared evidence folder",
      "url": "https://app.box.com/embed/s/cjmt5wsne4qd585uaqfqf2n1jmocx6qx?sortColumn=date"},
     {"k": "gaps",      "t": "Gap report (Excel)", "s": "Assessment findings workbook",
-     "url": "https://app.box.com/integrations/officeonline/openOfficeOnline?fileId=2411611826029&sharedAccessCode="},
+     "url": "https://app.box.com/embed/s/aa38b8t7vyhe5xazjw8ycqwhnklwh4j2"},
     {"k": "milestones","t": "Milestones plan (Excel)", "s": "PCI DSS project plan workbook",
-     "url": "https://app.box.com/integrations/officeonline/openOfficeOnline?fileId=2243065682000&sharedAccessCode="},
+     "url": "https://app.box.com/embed/s/uznh5wcvxbif8vv25qtiogwwe2sppujb"},
 ]
 
 def encrypt_payload(plaintext: str, password: str) -> dict:
