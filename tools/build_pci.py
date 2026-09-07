@@ -300,6 +300,7 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
         <button class="afb" onclick="actFilter(this,'comment')">💬 Comments</button>
         <button class="afb" onclick="actFilter(this,'status')">✓ Status</button>
         <button class="afb" onclick="actFilter(this,'edit')">✎ Edits</button>
+        <button class="afb bot on" id="act-bot" onclick="actBots(this)">🤖 Automation hidden</button>
       </div></div>
     <div class="act" id="act-list"></div>
     <div style="text-align:center;margin-top:14px"><button class="cbtn" id="act-more" onclick="actMore()" style="display:none">Show more</button></div>
@@ -367,7 +368,7 @@ function render(){
 }
 
 // ── Latest activity on FIBXPI-49 (+children): status, edits, comments ──
-let ACT=[], ACT_K='', ACT_N=25;
+let ACT=[], ACT_K='', ACT_N=25, ACT_BOT=true;   // ACT_BOT: hide "Automation for Jira" noise
 function ago(ts){
   const s=Math.max(0,(Date.now()-new Date(ts).getTime())/1000);
   if(s<60) return 'just now';
@@ -381,7 +382,7 @@ async function loadActivity(){
   if(!GH_PROXY) return;
   const pw=sessionStorage.getItem('pci_pw')||'';
   try{
-    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'activity'})});
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'activity',limit:600})});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const d=await r.json(); ACT=d.items||[];
     document.getElementById('act-sec').style.display='';
@@ -389,18 +390,28 @@ async function loadActivity(){
   }catch(e){}
 }
 function actFilter(btn,k){
-  document.querySelectorAll('.afb').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.afb:not(.bot)').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on'); ACT_K=k; ACT_N=25; renderActivity();
+}
+function actBots(btn){
+  ACT_BOT=!ACT_BOT;                         // ACT_BOT = hide automation
+  btn.classList.toggle('on',ACT_BOT);
+  btn.textContent=ACT_BOT?'🤖 Automation hidden':'🤖 Automation shown';
+  ACT_N=25; renderActivity();
 }
 function actMore(){ ACT_N+=25; renderActivity(); }
 function renderActivity(){
-  const rows=ACT.filter(a=>!ACT_K||a.kind===ACT_K);
-  const nC=ACT.filter(a=>a.kind==='comment').length, nS=ACT.filter(a=>a.kind==='status').length, nE=ACT.filter(a=>a.kind==='edit').length;
-  document.getElementById('act-sub').textContent='FIBXPI-49 · '+nC+' comments · '+nS+' status changes · '+nE+' edits';
+  const base=ACT.filter(a=>!(ACT_BOT&&a.bot));
+  const rows=base.filter(a=>!ACT_K||a.kind===ACT_K);
+  const nC=base.filter(a=>a.kind==='comment').length, nS=base.filter(a=>a.kind==='status').length, nE=base.filter(a=>a.kind==='edit').length;
+  const hidden=ACT.length-base.length;
+  document.getElementById('act-sub').textContent='epic FIBXPI-49 tree · '+nC+' comments · '+nS+' status changes · '+nE+' edits'
+    +(hidden?' · '+hidden+' automation hidden':'');
   const show=rows.slice(0,ACT_N);
   document.getElementById('act-list').innerHTML=show.map(a=>{
     const ic=a.kind==='comment'?'💬':(a.kind==='status'?'✓':'✎');
-    const keyLink=`<a class="akey" href="https://fibtask.atlassian.net/browse/${esc(a.key)}" target="_blank" rel="noopener">${esc(a.key)}</a>`;
+    const keyLink=`<a class="akey" href="https://fibtask.atlassian.net/browse/${esc(a.key)}" target="_blank" rel="noopener">${esc(a.key)}</a>`
+      +(a.bot?' <span class="achip" style="background:#f1f5f9;color:#94a3b8">🤖 automation</span>':'');
     let head='';
     if(a.kind==='comment') head=`<b>${esc(a.who||'—')}</b> commented on ${keyLink}`;
     else if(a.kind==='status') head=`<b>${esc(a.who||'—')}</b> changed status on ${keyLink}`;

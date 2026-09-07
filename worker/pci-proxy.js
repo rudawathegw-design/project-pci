@@ -121,44 +121,69 @@ export default {
       return json(200, { project, issues, count: issues.length });
     }
 
-    // ── Activity feed for the epic + its children: status changes, edits, comments ──
+    // ── Activity across the whole epic tree: epic → tasks → subtasks ──
+    // Uses bulk search with expand=changelog + fields=comment so ~113 issues cost
+    // ~3 subrequests instead of one per issue (Workers caps subrequests per request).
     if (body.action === "activity") {
       const epic = String(body.epic || env.JIRA_EPIC || "FIBXPI-49").trim();
-      // 1) collect the epic and every child key
-      const qs = new URLSearchParams({ jql: `key = "${epic}" OR parent = "${epic}"`, maxResults: "100", fields: "summary" });
-      const sr = await fetch(`${base}/rest/api/3/search/jql?${qs}`, { headers: jhdr });
-      if (!sr.ok) return json(502, { message: "Jira error", status: sr.status, detail: (await sr.text()).slice(0, 300) });
-      const sd = await sr.json();
-      const keys = (sd.issues || []).map(i => i.key);
-      // 2) pull changelog + comments per issue (small set: epic + ~9 children)
+      const isBot = (n) => /automation for jira|^automation$|\bbot\b|jira automation/i.test(String(n || ""));
       const items = [];
-      await Promise.all(keys.map(async (key) => {
-        const r = await fetch(`${base}/rest/api/3/issue/${key}?expand=changelog&fields=summary,comment`, { headers: jhdr });
-        if (!r.ok) return;
-        const d = await r.json();
-        const summary = (d.fields && d.fields.summary) || "";
-        for (const h of ((d.changelog && d.changelog.histories) || [])) {
-          for (const it of (h.items || [])) {
-            const field = it.field || "";
-            if (field === "Comment") continue;               // comments come through below
-            items.push({
-              ts: h.created, key, summary,
-              who: (h.author && h.author.displayName) || "",
-              kind: field.toLowerCase() === "status" ? "status" : "edit",
-              field, from: it.fromString || "", to: it.toString || "",
-            });
+      const seen = new Set();
+
+      async function harvest(jql) {
+        let token = null, keys = [];
+        for (let page = 0; page < 6; page++) {                 // cap 600 issues
+          const qs = new URLSearchParams({ jql, maxResults: "100", fields: "summary,comment", expand: "changelog" });
+          if (token) qs.set("nextPageToken", token);
+          const r = await fetch(`${base}/rest/api/3/search/jql?${qs}`, { headers: jhdr });
+          if (!r.ok) break;
+          const d = await r.json();
+          for (const it of (d.issues || [])) {
+            keys.push(it.key);
+            const summary = (it.fields && it.fields.summary) || "";
+            for (const h of ((it.changelog && it.changelog.histories) || [])) {
+              for (const ch of (h.items || [])) {
+                const field = ch.field || "";
+                if (field === "Comment") continue;             // comments handled below
+                const id = "c:" + it.key + h.created + field;
+                if (seen.has(id)) continue; seen.add(id);
+                const who = (h.author && h.author.displayName) || "";
+                items.push({
+                  ts: h.created, key: it.key, summary, who, bot: isBot(who),
+                  kind: field.toLowerCase() === "status" ? "status" : "edit",
+                  field, from: ch.fromString || "", to: ch.toString || "",
+                });
+              }
+            }
+            for (const c of (((it.fields || {}).comment || {}).comments || [])) {
+              const id = "m:" + c.id;
+              if (seen.has(id)) continue; seen.add(id);
+              const who = (c.author && c.author.displayName) || "";
+              items.push({
+                ts: c.created, key: it.key, summary, who, bot: isBot(who),
+                kind: "comment", text: adfToText(c.body).replace(/\n{2,}/g, "\n").trim().slice(0, 1200),
+              });
+            }
           }
+          token = d.nextPageToken;
+          if (!token || d.isLast) break;
         }
-        for (const c of (((d.fields || {}).comment || {}).comments || [])) {
-          items.push({
-            ts: c.created, key, summary,
-            who: (c.author && c.author.displayName) || "",
-            kind: "comment", text: adfToText(c.body).replace(/\n{2,}/g, "\n").trim().slice(0, 1200),
-          });
-        }
-      }));
+        return keys;
+      }
+
+      // level 1+2: the epic itself and its direct children
+      const childKeys = (await harvest(`key = "${epic}" OR parent = "${epic}"`)).filter(k => k !== epic);
+      // level 3: subtasks of those children
+      if (childKeys.length) {
+        const list = childKeys.map(k => `"${k}"`).join(",");
+        await harvest(`parent in (${list})`);
+      }
       items.sort((a, b) => (a.ts < b.ts ? 1 : -1));
-      return json(200, { epic, count: items.length, items: items.slice(0, Number(body.limit) || 120) });
+      const real = items.filter(i => !i.bot).length;
+      return json(200, {
+        epic, count: items.length, human: real, bots: items.length - real,
+        scope: 1 + childKeys.length, items: items.slice(0, Number(body.limit) || 400),
+      });
     }
 
     // ── Post a comment to a FIBXPI issue ──
