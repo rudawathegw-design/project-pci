@@ -571,22 +571,37 @@ async function saveCell(i,field,value,el){
 // ── Apply pending edits to the real .xlsx and hand it back for upload to Box ──
 function _xmlEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function _colNum(ref){ let n=0; for(const ch of /^[A-Z]+/.exec(ref)[0]) n=n*26+(ch.charCodeAt(0)-64); return n; }
+// Locate one <c> element exactly. A plain regex is unsafe here: cells are often
+// self-closing (<c r="I13" s="144"/>) and a greedy [^>]* eats the "/" then runs
+// on to the NEXT </c>, silently swallowing the following cell.
+function _findCell(rowXml,cellRef){
+  const m=new RegExp('<c\\s[^>]*r="'+cellRef+'"').exec(rowXml);
+  if(!m) return null;
+  const start=m.index, gt=rowXml.indexOf('>',start);
+  if(gt<0) return null;
+  if(rowXml[gt-1]==='/') return {start,end:gt+1};
+  const close=rowXml.indexOf('</c>',gt);
+  return {start,end:close<0?gt+1:close+4};
+}
 function _patchCell(xml,cellRef,value){
   const rowNo=/^[A-Z]+(\d+)$/.exec(cellRef)[1];
   const rm=new RegExp('<row [^>]*r="'+rowNo+'"[^>]*>[\\s\\S]*?</row>').exec(xml);
   if(!rm) throw new Error('row '+rowNo+' not found');
   const rowXml=rm[0];
-  const cm=new RegExp('<c [^>]*r="'+cellRef+'"[^>]*(?:/>|>[\\s\\S]*?</c>)').exec(rowXml);
   const inline=st=>'<c r="'+cellRef+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+_xmlEsc(value)+'</t></is></c>';
+  const hit=_findCell(rowXml,cellRef);
   let newRow;
-  if(cm){ const sm=/\ss="(\d+)"/.exec(cm[0]); newRow=rowXml.replace(cm[0],inline(sm?' s="'+sm[1]+'"':'')); }
-  else{
+  if(hit){
+    const old=rowXml.slice(hit.start,hit.end);
+    const sm=/\ss="(\d+)"/.exec(old);
+    newRow=rowXml.slice(0,hit.start)+inline(sm?' s="'+sm[1]+'"':'')+rowXml.slice(hit.end);
+  }else{
     const target=_colNum(cellRef); let at=null;
-    for(const c of rowXml.matchAll(/<c [^>]*r="([A-Z]+)\d+"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)){ if(_colNum(c[1]+'1')>target){ at=c.index; break; } }
+    for(const c of rowXml.matchAll(/<c\s[^>]*r="([A-Z]+)\d+"/g)){ if(_colNum(c[1]+'1')>target){ at=c.index; break; } }
     if(at===null) at=rowXml.lastIndexOf('</row>');
     newRow=rowXml.slice(0,at)+inline('')+rowXml.slice(at);
   }
-  return xml.replace(rowXml,newRow);
+  return xml.slice(0,rm.index)+newRow+xml.slice(rm.index+rowXml.length);
 }
 async function exportWorkbook(){
   const btn=document.getElementById('wl-export'); btn.disabled=true;

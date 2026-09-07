@@ -26,30 +26,42 @@ function colNum(ref) {
   let n = 0; for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
   return n;
 }
+// Locate one <c> element exactly. A plain regex is unsafe: cells are often
+// self-closing (<c r="I13" s="144"/>) and a greedy [^>]* eats the "/" then runs
+// on to the NEXT </c>, silently swallowing the following cell.
+function findCell(rowXml, cellRef) {
+  const m = new RegExp(`<c\\s[^>]*r="${cellRef}"`).exec(rowXml);
+  if (!m) return null;
+  const start = m.index, gt = rowXml.indexOf(">", start);
+  if (gt < 0) return null;
+  if (rowXml[gt - 1] === "/") return { start, end: gt + 1 };
+  const close = rowXml.indexOf("</c>", gt);
+  return { start, end: close < 0 ? gt + 1 : close + 4 };
+}
 // Replace (or insert) one cell as an inline string, keeping its style index.
 function patchCell(sheetXml, cellRef, value) {
   const rowNo = /^[A-Z]+(\d+)$/.exec(cellRef)[1];
-  const rowRe = new RegExp(`<row [^>]*r="${rowNo}"[^>]*>[\\s\\S]*?</row>`);
-  const rm = rowRe.exec(sheetXml);
+  const rm = new RegExp(`<row [^>]*r="${rowNo}"[^>]*>[\\s\\S]*?</row>`).exec(sheetXml);
   if (!rm) throw new Error(`row ${rowNo} not found`);
   const rowXml = rm[0];
-  const cellRe = new RegExp(`<c [^>]*r="${cellRef}"[^>]*(?:/>|>[\\s\\S]*?</c>)`);
-  const cm = cellRe.exec(rowXml);
   const inline = (style) =>
     `<c r="${cellRef}"${style} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(value)}</t></is></c>`;
+  const hit = findCell(rowXml, cellRef);
   let newRow;
-  if (cm) {
-    const sm = /\ss="(\d+)"/.exec(cm[0]);
-    newRow = rowXml.replace(cm[0], inline(sm ? ` s="${sm[1]}"` : ""));
+  if (hit) {
+    const old = rowXml.slice(hit.start, hit.end);
+    const sm = /\ss="(\d+)"/.exec(old);
+    newRow = rowXml.slice(0, hit.start) + inline(sm ? ` s="${sm[1]}"` : "") + rowXml.slice(hit.end);
   } else {
     const target = colNum(cellRef);
-    const cells = [...rowXml.matchAll(/<c [^>]*r="([A-Z]+)\d+"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)];
     let at = null;
-    for (const c of cells) if (colNum(c[1] + "1") > target) { at = c.index; break; }
+    for (const c of rowXml.matchAll(/<c\s[^>]*r="([A-Z]+)\d+"/g)) {
+      if (colNum(c[1] + "1") > target) { at = c.index; break; }
+    }
     if (at === null) at = rowXml.lastIndexOf("</row>");
     newRow = rowXml.slice(0, at) + inline("") + rowXml.slice(at);
   }
-  return sheetXml.replace(rowXml, newRow);
+  return sheetXml.slice(0, rm.index) + newRow + sheetXml.slice(rm.index + rowXml.length);
 }
 // Map a sheet's display name to its xl/worksheets/sheetN.xml entry.
 function sheetPathFor(files, sheetName) {
