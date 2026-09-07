@@ -2,11 +2,18 @@ name = "project-pci-proxy"
 main = "pci-proxy.js"
 compatibility_date = "2024-11-01"
 
+# Stores the Box OAuth refresh token (set once via the /box/auth flow).
+[[kv_namespaces]]
+binding = "BOXTOK"
+id = "bdcc8b9bb9c8440abab76fdaa6c80128"
+
 [vars]
 ALLOWED_ORIGIN = "https://fibpmo.com,https://www.fibpmo.com,https://rudawathegw-design.github.io"
 JIRA_BASE_URL = "https://fibtask.atlassian.net"
 JIRA_PROJECT = "FIBXPI"
 JIRA_EPIC = "FIBXPI-49"
+# Box file id of the Assessment Gap Report workbook (for authenticated write-back).
+BOX_FILE_ID = "2411611826029"
 # Public Box shared-file direct-download URL for the Assessment Gap Report.xlsx.
 # The share is "anyone with the link · view and download", so the Worker can
 # fetch it server-side (no CORS, no login) and hand the bytes to the cockpit.

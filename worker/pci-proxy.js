@@ -7,8 +7,81 @@
  * Secrets: JIRA_EMAIL, JIRA_API_TOKEN, SITE_PASSWORD (="pci"), COMMENT_PASSWORD (optional)
  * Vars: ALLOWED_ORIGIN, JIRA_BASE_URL, JIRA_PROJECT
  */
+import { unzipSync, zipSync, strToU8, strFromU8 } from "fflate";
+
 const DEFAULT_BASE = "https://fibtask.atlassian.net";
 const DEFAULT_PROJECT = "FIBXPI";
+
+/* ─────────────── Box write-back helpers ───────────────
+   The cockpit edits only two columns (FIB Status, Link). We patch the single
+   cell inside the .xlsx zip rather than re-writing the workbook, so formulas,
+   styles, merges and the logo all survive untouched. Verified against the real
+   workbook: =COUNTIF(...) formulas and cell styles are preserved.            */
+
+function xmlEsc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function colNum(ref) {
+  const letters = /^[A-Z]+/.exec(ref)[0];
+  let n = 0; for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n;
+}
+// Replace (or insert) one cell as an inline string, keeping its style index.
+function patchCell(sheetXml, cellRef, value) {
+  const rowNo = /^[A-Z]+(\d+)$/.exec(cellRef)[1];
+  const rowRe = new RegExp(`<row [^>]*r="${rowNo}"[^>]*>[\\s\\S]*?</row>`);
+  const rm = rowRe.exec(sheetXml);
+  if (!rm) throw new Error(`row ${rowNo} not found`);
+  const rowXml = rm[0];
+  const cellRe = new RegExp(`<c [^>]*r="${cellRef}"[^>]*(?:/>|>[\\s\\S]*?</c>)`);
+  const cm = cellRe.exec(rowXml);
+  const inline = (style) =>
+    `<c r="${cellRef}"${style} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(value)}</t></is></c>`;
+  let newRow;
+  if (cm) {
+    const sm = /\ss="(\d+)"/.exec(cm[0]);
+    newRow = rowXml.replace(cm[0], inline(sm ? ` s="${sm[1]}"` : ""));
+  } else {
+    const target = colNum(cellRef);
+    const cells = [...rowXml.matchAll(/<c [^>]*r="([A-Z]+)\d+"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)];
+    let at = null;
+    for (const c of cells) if (colNum(c[1] + "1") > target) { at = c.index; break; }
+    if (at === null) at = rowXml.lastIndexOf("</row>");
+    newRow = rowXml.slice(0, at) + inline("") + rowXml.slice(at);
+  }
+  return sheetXml.replace(rowXml, newRow);
+}
+// Map a sheet's display name to its xl/worksheets/sheetN.xml entry.
+function sheetPathFor(files, sheetName) {
+  const wb = strFromU8(files["xl/workbook.xml"]);
+  const rels = strFromU8(files["xl/_rels/workbook.xml.rels"]);
+  const want = sheetName.trim().toLowerCase();
+  for (const m of wb.matchAll(/<sheet[^>]*name="([^"]*)"[^>]*r:id="([^"]*)"[^>]*\/>/g)) {
+    const nm = m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    if (nm.trim().toLowerCase() !== want) continue;
+    const rel = new RegExp(`<Relationship[^>]*Id="${m[2]}"[^>]*Target="([^"]*)"`).exec(rels);
+    if (!rel) return null;
+    return "xl/" + rel[1].replace(/^\/?xl\//, "");
+  }
+  return null;
+}
+
+// ── Box OAuth: refresh token lives in KV; access tokens are short-lived ──
+async function boxAccessToken(env) {
+  const refresh = await env.BOXTOK.get("refresh_token");
+  if (!refresh) throw new Error("Box not connected — visit /box/auth on this worker to authorize.");
+  const r = await fetch("https://api.box.com/oauth2/token", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token", refresh_token: refresh,
+      client_id: env.BOX_CLIENT_ID, client_secret: env.BOX_CLIENT_SECRET,
+    }),
+  });
+  if (!r.ok) throw new Error("Box token refresh failed: " + (await r.text()).slice(0, 200));
+  const d = await r.json();
+  if (d.refresh_token) await env.BOXTOK.put("refresh_token", d.refresh_token); // Box rotates these
+  return d.access_token;
+}
 
 function cors(origin) {
   return {
@@ -52,6 +125,39 @@ export default {
     const json = (s, o) => new Response(JSON.stringify(o), { status: s, headers: { ...H, "Content-Type": "application/json" } });
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+
+    // ── One-time Box authorization (browser GET, not part of the JSON API) ──
+    const url = new URL(request.url);
+    if (url.pathname === "/box/auth") {
+      if (!env.BOX_CLIENT_ID) return new Response("BOX_CLIENT_ID not set", { status: 500 });
+      const redirect = `${url.origin}/box/callback`;
+      const auth = new URL("https://account.box.com/api/oauth2/authorize");
+      auth.searchParams.set("client_id", env.BOX_CLIENT_ID);
+      auth.searchParams.set("response_type", "code");
+      auth.searchParams.set("redirect_uri", redirect);
+      return Response.redirect(auth.toString(), 302);
+    }
+    if (url.pathname === "/box/callback") {
+      const code = url.searchParams.get("code");
+      if (!code) return new Response("Missing code", { status: 400 });
+      const r = await fetch("https://api.box.com/oauth2/token", {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code", code,
+          client_id: env.BOX_CLIENT_ID, client_secret: env.BOX_CLIENT_SECRET,
+          redirect_uri: `${url.origin}/box/callback`,
+        }),
+      });
+      const t = await r.text();
+      if (!r.ok) return new Response("Box authorization failed: " + t.slice(0, 300), { status: 502 });
+      const d = JSON.parse(t);
+      await env.BOXTOK.put("refresh_token", d.refresh_token);
+      return new Response(
+        "<h2 style='font-family:system-ui'>✅ Box connected</h2><p style='font-family:system-ui'>" +
+        "The PCI cockpit can now save edits back to the gap workbook. You can close this tab.</p>",
+        { headers: { "Content-Type": "text/html" } });
+    }
+
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: H });
     if (allow.length && origin && !ok) return new Response("Forbidden origin", { status: 403, headers: H });
 
@@ -119,6 +225,62 @@ export default {
         token = d.nextPageToken; if (!token || d.isLast) break;
       }
       return json(200, { project, issues, count: issues.length });
+    }
+
+    // ── Write one cell back into the Box gap workbook (FIB Status / Link only) ──
+    if (body.action === "gap_edit") {
+      const cAuth = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
+      const okC = (env.COMMENT_PASSWORD && eq(cAuth, env.COMMENT_PASSWORD)) ||
+                  (!env.COMMENT_PASSWORD && eq(cAuth, env.SITE_PASSWORD));
+      if (!okC) { await new Promise(r => setTimeout(r, 300)); return json(401, { message: "Edit password required" }); }
+      const sheet = String(body.sheet || "").trim();
+      const cell = String(body.cell || "").trim().toUpperCase();
+      const value = String(body.value == null ? "" : body.value);
+      const field = String(body.field || "");
+      if (!sheet || !/^[A-Z]+\d+$/.test(cell)) return json(400, { message: "Bad sheet/cell" });
+      if (!["fib_status", "link"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });
+      if (value.length > 500) return json(400, { message: "Value too long" });
+      const fileId = env.BOX_FILE_ID;
+      if (!fileId) return json(500, { message: "BOX_FILE_ID not set" });
+
+      let token;
+      try { token = await boxAccessToken(env); }
+      catch (e) { return json(409, { message: String(e.message || e), needsAuth: true }); }
+      const bh = { Authorization: `Bearer ${token}` };
+
+      // current version (etag) so a concurrent assessor edit can't be clobbered
+      const info = await fetch(`https://api.box.com/2.0/files/${fileId}?fields=etag,name,sha1`, { headers: bh });
+      if (!info.ok) return json(502, { message: "Box file info failed", detail: (await info.text()).slice(0, 200) });
+      const meta = await info.json();
+      if (body.baseEtag && String(body.baseEtag) !== String(meta.etag)) {
+        return json(409, { message: "The workbook changed in Box since you loaded it. Refresh and retry.", etag: meta.etag });
+      }
+
+      const dl = await fetch(`https://api.box.com/2.0/files/${fileId}/content`, { headers: bh, redirect: "follow" });
+      if (!dl.ok) return json(502, { message: "Box download failed", status: dl.status });
+      const files = unzipSync(new Uint8Array(await dl.arrayBuffer()));
+      const path = sheetPathFor(files, sheet);
+      if (!path || !files[path]) return json(400, { message: `Sheet "${sheet}" not found` });
+      let xml;
+      try { xml = patchCell(strFromU8(files[path]), cell, value); }
+      catch (e) { return json(400, { message: "Patch failed: " + (e.message || e) }); }
+      files[path] = strToU8(xml);
+      const out = zipSync(files, { level: 6 });
+
+      // upload as a NEW VERSION, guarded by If-Match
+      const fd = new FormData();
+      fd.append("attributes", JSON.stringify({ name: meta.name }));
+      fd.append("file", new Blob([out],
+        { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), meta.name);
+      const up = await fetch(`https://upload.box.com/api/2.0/files/${fileId}/content`, {
+        method: "POST", headers: { ...bh, "If-Match": meta.etag }, body: fd,
+      });
+      const ut = await up.text();
+      if (up.status === 412) return json(409, { message: "Someone else saved the workbook first. Refresh and retry." });
+      if (!up.ok) return json(502, { message: "Box upload failed", status: up.status, detail: ut.slice(0, 300) });
+      const ud = JSON.parse(ut);
+      const nv = (ud.entries && ud.entries[0]) || {};
+      return json(200, { ok: true, cell, sheet, value, version: nv.etag, name: nv.name });
     }
 
     // ── Activity across the whole epic tree: epic → tasks → subtasks ──

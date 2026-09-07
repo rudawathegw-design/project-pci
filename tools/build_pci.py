@@ -215,6 +215,15 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .st-tag{font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;white-space:nowrap;display:inline-block}
 .st-tag.open{background:#fee2e2;color:#b91c1c}.st-tag.closed{background:#dcfce7;color:#166534}.st-tag.na{background:#f1f5f9;color:#64748b}
 .fib-tag{font-size:11px;font-weight:700;color:#475569}
+.fibsel{border:1px solid var(--line);border-radius:8px;padding:4px 6px;font-size:11.5px;font-weight:700;color:#334155;background:#fff;cursor:pointer;max-width:112px}
+.fibsel:hover{border-color:var(--teal)}.fibsel:disabled{opacity:.5;cursor:wait}
+.pen{border:1px solid var(--line);background:#fff;color:#64748b;border-radius:6px;padding:1px 6px;font-size:11px;cursor:pointer;margin-left:5px}
+.pen:hover{border-color:var(--teal);color:var(--teal-d)}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:#0b1f3a;color:#fff;
+  font-size:13px;font-weight:700;padding:11px 20px;border-radius:11px;box-shadow:0 12px 34px rgba(11,31,58,.3);
+  opacity:0;pointer-events:none;transition:.25s;z-index:1200;max-width:min(560px,92vw);text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.bad{background:#b91c1c}
 /* jira reference */
 .jref{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
 .jr{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 13px}
@@ -457,17 +466,23 @@ function parseGaps(wb){
     const hdr=rows[hi].map(c=>norm(c).toLowerCase());
     const col=(...names)=>{ for(let j=0;j<hdr.length;j++) if(names.some(nm=>hdr[j].includes(nm))) return j; return -1; };
     const ci={section:col('section'),obs:col('observation'),rec:col('recommendation'),ev:col('evidence req','evidence'),status:col('status'),assessor:col('assessor'),client:col('client comment'),fib:col('fib status'),link:col('link')};
+    const colLetter=n=>{ let s=''; n=n+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
     const findings=[];
+    let _k=-1;
     for(const r of rows.slice(hi+1)){
+      _k++;
       const section=ci.section>=0?norm(r[ci.section]):'', obs=ci.obs>=0?norm(r[ci.obs]):'';
       if(!section&&!obs) continue;
+      // exact spreadsheet coordinates so edits can be written back to Box
+      const _row=hi+_k+2, _cFib=ci.fib>=0?colLetter(ci.fib):'', _cLink=ci.link>=0?colLetter(ci.link):'';
       const stRaw=ci.status>=0?norm(r[ci.status]).toLowerCase():'';
       const status=stRaw.includes('clos')?'Closed':(stRaw.includes('open')?'Open':(ci.status>=0?norm(r[ci.status]):''));
       let jira=ci.link>=0&&/atlassian/.test(norm(r[ci.link]))?norm(r[ci.link]):'';
       if(!jira) for(const c of r){ const s=norm(c); if(/atlassian\.net\/browse\//.test(s)){ jira=s; break; } }
       findings.push({section,observation:obs,recommendation:ci.rec>=0?norm(r[ci.rec]):'',
         evidence_required:ci.ev>=0?norm(r[ci.ev]):'',status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
-        assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira});
+        assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira,
+        _sheet:sn,_row,_cFib,_cLink});
     }
     const key=norm(sn).toLowerCase();
     let area=byName[key]||areas.find(a=>key.startsWith(a.name.toLowerCase())||a.name.toLowerCase().startsWith(key));
@@ -501,7 +516,46 @@ async function loadFindingStatuses(){
     renderWorklist();
   }catch(e){}
 }
-let WL_ALL=[];
+let WL_ALL=[], FIB_OPTS=[''];
+// ── Write an edit back into the Box workbook (FIB Status / Link only) ──
+function toast(msg,bad){
+  let t=document.getElementById('toast');
+  if(!t){ t=document.createElement('div'); t.id='toast'; document.body.appendChild(t); }
+  t.textContent=msg; t.className='show'+(bad?' bad':'');
+  clearTimeout(window._tt); window._tt=setTimeout(()=>{t.className='';},bad?6000:2600);
+}
+async function saveCell(i,field,value,el){
+  const f=WL_ALL[i]; if(!f) return;
+  const col=field==='fib_status'?f._cFib:f._cLink;
+  if(!col){ toast('That column does not exist in this sheet.',1); return; }
+  const prev=f[field]||'';
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  if(el) el.disabled=true; toast('Saving to Box…');
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},
+      body:JSON.stringify({action:'gap_edit',sheet:f._sheet,cell:col+f._row,value,field})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){
+      if(el){ el.disabled=false; if(el.tagName==='SELECT') el.value=prev; }
+      toast(d.needsAuth?'Box is not connected yet — authorize it first.':('Save failed: '+(d.message||('HTTP '+r.status))),1);
+      return;
+    }
+    f[field]=value;
+    if(field==='link'){ f.jira=value; }
+    if(el) el.disabled=false;
+    toast('Saved to the Box workbook ✓');
+    if(field==='link') renderWorklist();
+  }catch(e){ if(el) el.disabled=false; toast('Save failed: '+e.message,1); }
+}
+function editTicket(i){
+  const f=WL_ALL[i]; if(!f) return;
+  const cur=f.jira||'';
+  const v=prompt('Jira ticket for this finding — paste a key (FIBXPI-123) or full URL.\nLeave empty to clear.',cur);
+  if(v===null) return;
+  let val=v.trim();
+  if(val && /^[A-Za-z]+-\d+$/.test(val)) val='https://fibtask.atlassian.net/browse/'+val.toUpperCase();
+  saveCell(i,'link',val,null);
+}
 function renderGaps(){
   const gs=GAPS.summary||{}, areas=GAPS.areas||[];
   // strip
@@ -512,6 +566,11 @@ function renderGaps(){
   document.getElementById('sn-total').textContent=(gs.total||0);
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
+  WL_ALL.forEach((f,i)=>f._i=i);
+  // FIB status choices = whatever the workbook already uses, plus the usual set
+  const seen=new Set(WL_ALL.map(f=>(f.fib_status||'').trim()).filter(Boolean));
+  ['Done','In Progress','On Hold','Not Started'].forEach(v=>{ if(![...seen].some(s=>s.toLowerCase()===v.toLowerCase())) seen.add(v); });
+  FIB_OPTS=[''].concat([...seen].sort());
   // area filter options
   const sel=document.getElementById('f-area');
   sel.innerHTML='<option value="">All areas ('+WL_ALL.length+')</option>'+
@@ -537,7 +596,12 @@ function renderWorklist(){
     const key=jiraKey(f.jira);
     const live=key&&_LIVE[key]?_LIVE[key]:null;
     const liveChip=live?`<div class="tk-live ${live.category==='done'?'done':(live.category==='new'?'todo':'prog')}"><span class="tk-dot"></span>${esc(live.status)}</div>`:'';
-    const tk=key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>${liveChip}`:'<span class="none">no ticket</span>';
+    const pen=f._cLink?`<button class="pen" title="Edit ticket — saves to the Box workbook" onclick="event.stopPropagation();editTicket(${f._i})">✎</button>`:'';
+    const tk=(key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>`:'<span class="none">no ticket</span>')+pen+liveChip;
+    const fibCell=f._cFib
+      ? `<select class="fibsel" onclick="event.stopPropagation()" onchange="saveCell(${f._i},'fib_status',this.value,this)">`+
+        FIB_OPTS.map(o=>`<option value="${esc(o)}"${(f.fib_status||'')===o?' selected':''}>${esc(o||'—')}</option>`).join('')+`</select>`
+      : `<span class="fib-tag">${esc(f.fib_status||'—')}</span>`;
     const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
     return `<tr class="f-open" onclick="this.classList.toggle('exp')">
       <td><div class="wl-area">${esc(f.area)}</div></td>
@@ -551,7 +615,7 @@ function renderWorklist(){
         </div></td>
       <td class="wl-tk">${tk}</td>
       <td>${stTag}</td>
-      <td><span class="fib-tag">${esc(f.fib_status||'—')}</span></td></tr>`;
+      <td>${fibCell}</td></tr>`;
   }).join('');
 }
 
