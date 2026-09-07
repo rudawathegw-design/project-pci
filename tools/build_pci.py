@@ -19,11 +19,17 @@ PBKDF2_ITERATIONS = 300_000
 # cockpit renders the imported baseline only (no live layer).
 GH_PROXY = os.environ.get("PCI_PROXY", "https://project-pci-proxy.rudaw-a-the-gw.workers.dev")
 
-# Box evidence embeds (share links).
-EVIDENCE = {
-    "evidences": "https://app.box.com/embed/s/698kt3rxy7akyza01za5lmtr68t6zdq4?sortColumn=date",
-    "whole":     "https://app.box.com/embed/s/cjmt5wsne4qd585uaqfqf2n1jmocx6qx?sortColumn=date",
-}
+# Box evidence embeds — folders (share links) + the two source workbooks.
+EVIDENCE = [
+    {"k": "evidences", "t": "Evidence library",  "s": "Screenshots, configs & supporting proofs",
+     "url": "https://app.box.com/embed/s/698kt3rxy7akyza01za5lmtr68t6zdq4?sortColumn=date"},
+    {"k": "whole",     "t": "Full evidence set",  "s": "Complete shared evidence folder",
+     "url": "https://app.box.com/embed/s/cjmt5wsne4qd585uaqfqf2n1jmocx6qx?sortColumn=date"},
+    {"k": "gaps",      "t": "Gap report (Excel)", "s": "Assessment findings workbook",
+     "url": "https://app.box.com/integrations/officeonline/openOfficeOnline?fileId=2411611826029&sharedAccessCode="},
+    {"k": "milestones","t": "Milestones plan (Excel)", "s": "PCI DSS project plan workbook",
+     "url": "https://app.box.com/integrations/officeonline/openOfficeOnline?fileId=2243065682000&sharedAccessCode="},
+]
 
 def encrypt_payload(plaintext: str, password: str) -> dict:
     salt  = secrets.token_bytes(16); nonce = secrets.token_bytes(12)
@@ -53,18 +59,18 @@ body{margin:0;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-s
   background:radial-gradient(ellipse 120% 60% at 50% -10%,#e7eef8,transparent 60%),var(--bg);-webkit-font-smoothing:antialiased}
 .wrap{max-width:1240px;margin:0 auto;padding:clamp(14px,2.2vw,30px);overflow-x:clip}
 h1,h2,h3{margin:0}a{color:var(--teal-d)}
-#gate{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0b1f3a,#0a1830);overflow:hidden}
-#gate::before{content:"";position:absolute;inset:0;opacity:.14;background-image:linear-gradient(#ffffff22 1px,transparent 1px),linear-gradient(90deg,#ffffff22 1px,transparent 1px);background-size:40px 40px}
-.gate-card{position:relative;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:34px;width:min(400px,92vw);backdrop-filter:blur(8px);color:#fff;box-shadow:0 30px 80px rgba(0,0,0,.45)}
-.gate-badge{font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:#5eead4}
-.gate-title{font-size:23px;font-weight:800;margin-top:8px}
-.gate-sub{color:#a9b7cc;font-size:13.5px;margin-top:8px;line-height:1.5}
-.gate-inp{width:100%;margin-top:18px;border:1.5px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;border-radius:11px;padding:13px 15px;font-size:15px;outline:none;letter-spacing:2px}
-.gate-inp:focus{border-color:#5eead4}
-.gate-btn{width:100%;margin-top:12px;border:none;border-radius:11px;padding:13px;font-weight:800;font-size:15px;color:#04231f;background:linear-gradient(90deg,#2dd4bf,#0f9389);cursor:pointer}
+#gate{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:#f4f7fa;overflow:hidden}
+#gate::before{content:"";position:absolute;inset:0;opacity:1;background-image:radial-gradient(ellipse 90% 55% at 50% -10%,#e3edf7,transparent 60%),linear-gradient(#0b1f3a08 1px,transparent 1px),linear-gradient(90deg,#0b1f3a08 1px,transparent 1px);background-size:auto,42px 42px,42px 42px}
+.gate-card{position:relative;background:#fff;border:1px solid var(--line);border-radius:20px;padding:34px;width:min(400px,92vw);color:#0f172a;box-shadow:0 30px 70px rgba(15,31,58,.14)}
+.gate-badge{font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:var(--teal-d)}
+.gate-title{font-size:23px;font-weight:800;margin-top:8px;color:#0b1f3a}
+.gate-sub{color:#64748b;font-size:13.5px;margin-top:8px;line-height:1.5}
+.gate-inp{width:100%;margin-top:18px;border:1.5px solid #e2e8f0;background:#fff;color:#0f172a;border-radius:11px;padding:13px 15px;font-size:15px;outline:none;letter-spacing:2px}
+.gate-inp:focus{border-color:var(--teal)}
+.gate-btn{width:100%;margin-top:12px;border:none;border-radius:11px;padding:13px;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(90deg,#0f9389,#0c7a72);cursor:pointer}
 .gate-btn:disabled{opacity:.7;cursor:wait}
-.gate-err{color:#fca5a5;font-size:12.5px;height:16px;margin-top:8px}
-.gate-foot{color:#7c8aa3;font-size:11px;margin-top:18px}
+.gate-err{color:#dc2626;font-size:12.5px;height:16px;margin-top:8px}
+.gate-foot{color:#94a3b8;font-size:11px;margin-top:18px}
 #intro{position:fixed;inset:0;z-index:900;background:#04101f;display:none;overflow:hidden}
 #intro video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 #intro .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,16,31,.15),rgba(4,16,31,.75))}
@@ -122,6 +128,9 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .ov.show{display:flex}
 .modal{background:#fff;border-radius:18px;width:min(940px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
 .modal.wide{width:min(1000px,97vw)}
+.modal.full{width:100vw;height:100vh;max-height:100vh;border-radius:0}
+.modal.full .m-body{flex:1}
+.modal.full iframe{height:calc(100vh - 60px)!important}
 .m-head{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .m-head h3{font-size:16px;font-weight:800}
 .m-close{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 14px;font-weight:700;cursor:pointer}
@@ -135,6 +144,16 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .f-row{font-size:13px;color:#334155;line-height:1.55;margin-top:6px}.f-row b{color:#0f172a}
 .f-links{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap}
 .f-links a{font-size:12px;font-weight:700;text-decoration:none;background:#f1f5f9;padding:6px 11px;border-radius:8px}
+.cbtn{font-size:12px;font-weight:700;border:1px solid var(--line);background:#fff;padding:6px 11px;border-radius:8px;cursor:pointer;color:var(--teal-d)}
+.cbtn:hover{background:#f0faf9;border-color:var(--teal)}
+.live-grid{display:grid;gap:6px}
+.live-row{display:grid;grid-template-columns:100px 1fr auto auto;gap:12px;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:inherit;background:#fff}
+.live-row:hover{border-color:var(--red);background:#fff7f7}
+.lr-key{font-weight:800;font-size:12px;color:var(--teal-d);font-family:ui-monospace,monospace}
+.lr-sum{font-size:13px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lr-st{font-size:11px;font-weight:700;color:#64748b}
+.lr-days{font-size:12px;font-weight:800;color:var(--red);white-space:nowrap}
+@media(max-width:640px){.live-row{grid-template-columns:80px 1fr auto}.lr-st{display:none}}
 .foot{color:var(--slate);font-size:11.5px;text-align:center;margin:24px 0 8px}
 </style></head>
 <body>
@@ -148,7 +167,7 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   <div class="gate-foot">Encrypted end-to-end · authorized personnel only</div>
 </div></div>
 <div id="intro">
-  <video id="introv" src="intro.mp4" muted playsinline preload="auto"></video>
+  <video id="introv" src="intro.mp4" playsinline preload="auto"></video>
   <div class="veil"></div>
   <div class="cap"><small>First Iraq Bank</small>PCI DSS Compliance Cockpit</div>
   <button class="skip" onclick="endIntro()">Skip ›</button>
@@ -167,12 +186,10 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
     <div class="hcard"><div class="hlbl">Current phase</div><div class="hbig" id="cur-phase" style="font-size:22px;line-height:1.15;margin-top:12px">—</div><div class="hsub" id="cur-sub">—</div></div>
   </div>
   <div class="sec"><div class="sec-h"><div class="sec-t">Project journey <small>start → certification</small></div></div><div class="journey" id="journey"></div></div>
+  <div class="sec" id="live-sec" style="display:none"><div class="sec-h"><div class="sec-t">Overdue &amp; at-risk <small id="live-sub">live from Jira FIBXPI</small></div></div><div id="live-list"></div></div>
   <div class="sec"><div class="sec-h"><div class="sec-t">Gap remediation by area <small id="gap-count"></small></div></div><div class="gaps" id="gaps"></div></div>
-  <div class="sec"><div class="sec-h"><div class="sec-t">Evidence <small>documents & proofs on Box</small></div></div>
-    <div class="ev-row">
-      <div class="ev-btn" onclick="openEvidence('evidences')"><div class="t">📁 Evidence library</div><div class="s">Screenshots, configs & supporting proofs</div></div>
-      <div class="ev-btn" onclick="openEvidence('whole')"><div class="t">🗂️ Full evidence set</div><div class="s">Complete shared evidence folder</div></div>
-    </div>
+  <div class="sec"><div class="sec-h"><div class="sec-t">Documents &amp; evidence <small>opens full-screen from Box</small></div></div>
+    <div class="ev-row" id="ev-row"></div>
   </div>
   <div class="foot">First Iraq Bank · PCI DSS Compliance Cockpit · generated <span id="gen2"></span></div>
 </div></div>
@@ -253,6 +270,36 @@ function render(){
       <span class="pill"><span class="dot-c"></span> <b>${a.closed}</b> closed</span>
       <span style="margin-left:auto">${a.total} total</span></div></div>`;
   }).join('');
+  document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>`<div class="ev-btn" onclick="openEvidence('${e.k}')"><div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
+  loadLive();
+}
+// ── Live FIBXPI (status + overdue) via the worker ──
+let _LIVE = {};
+async function loadLive(){
+  if(!GH_PROXY) return;
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'issues'})});
+    if(!r.ok) return; const d=await r.json();
+    const map={}; (d.issues||[]).forEach(i=>map[i.key]=i); _LIVE=map;
+    const today=new Date().toISOString().slice(0,10);
+    const overdue=(d.issues||[]).filter(i=>i.due && i.category!=='done' && i.due<today)
+      .sort((a,b)=>a.due<b.due?-1:1);
+    const sec=document.getElementById('live-sec'), list=document.getElementById('live-list');
+    document.getElementById('live-sub').textContent='live from Jira FIBXPI · '+(d.count||0)+' issues · '+overdue.length+' overdue';
+    if(!overdue.length){ list.innerHTML='<div style="color:#64748b;font-size:13px;padding:6px 2px">Nothing overdue right now. 🎉</div>'; }
+    else{
+      list.innerHTML='<div class="live-grid">'+overdue.slice(0,60).map(i=>{
+        const days=Math.round((Date.now()-new Date(i.due).getTime())/86400000);
+        return `<a class="live-row" href="https://fibtask.atlassian.net/browse/${esc(i.key)}" target="_blank" rel="noopener">
+          <span class="lr-key">${esc(i.key)}</span>
+          <span class="lr-sum">${esc(i.summary)}</span>
+          <span class="lr-st">${esc(i.status)}</span>
+          <span class="lr-days">${days}d</span></a>`;
+      }).join('')+'</div>';
+    }
+    sec.style.display='';
+  }catch(e){}
 }
 function openArea(idx){
   const a=(PCI.gaps.areas||[])[idx]; if(!a) return;
@@ -264,25 +311,39 @@ function openArea(idx){
     const stTag=st==='closed'?'<span class="tag closed">Closed</span>':(st==='open'?'<span class="tag open">Open</span>':'');
     const fib=f.fib_status?`<span class="tag fib">${esc(f.fib_status)}</span>`:'';
     const key=jiraKey(f.jira);
-    const links=f.jira?`<div class="f-links"><a href="${esc(f.jira)}" target="_blank" rel="noopener">Jira ${esc(key||'ticket')} ↗</a></div>`:'';
-    return `<div class="finding"><div class="f-top"><span class="f-sec">${i+1}. ${esc(f.section||'Finding')}</span>${stTag}${fib}</div>
+    const live=key&&_LIVE[key]?_LIVE[key]:null;
+    const liveChip=live?`<span class="tag" style="background:#eef2ff;color:#3730a3">Jira: ${esc(live.status)}</span>`:'';
+    const actions=key?`<div class="f-links"><a href="${esc(f.jira)}" target="_blank" rel="noopener">Jira ${esc(key)} ↗</a><button class="cbtn" onclick="commentOn('${esc(key)}')">💬 Comment</button></div>`:'';
+    return `<div class="finding"><div class="f-top"><span class="f-sec">${i+1}. ${esc(f.section||'Finding')}</span>${stTag}${fib}${liveChip}</div>
       ${f.observation?`<div class="f-row"><b>Observation:</b> ${esc(f.observation)}</div>`:''}
       ${f.recommendation?`<div class="f-row"><b>Recommendation:</b> ${esc(f.recommendation)}</div>`:''}
       ${f.evidence_required?`<div class="f-row"><b>Evidence required:</b> ${esc(f.evidence_required)}</div>`:''}
       ${f.assessor_comments?`<div class="f-row" style="color:#64748b"><b>Assessor:</b> ${esc(f.assessor_comments)}</div>`:''}
-      ${links}</div>`;
+      ${actions}</div>`;
   }).join('')||'<div style="padding:20px;color:#94a3b8">No findings.</div>';
   document.getElementById('ov').classList.add('show');
 }
-function openEvidence(which){
-  const url=EVIDENCE[which]; if(!url) return;
-  document.getElementById('ov-modal').classList.add('wide');
-  document.getElementById('ov-title').textContent = which==='whole'?'Full evidence set':'Evidence library';
+function openEvidence(k){
+  const e=EVIDENCE.find(x=>x.k===k); if(!e) return;
+  const m=document.getElementById('ov-modal'); m.classList.remove('wide'); m.classList.add('full');
+  document.getElementById('ov-title').textContent=e.t;
   const b=document.getElementById('ov-body'); b.classList.add('flush');
-  b.innerHTML=`<iframe src="${esc(url)}" style="width:100%;height:70vh;border:0;display:block" allowfullscreen></iframe>`;
+  b.innerHTML=`<iframe src="${esc(e.url)}" style="width:100%;height:calc(100vh - 60px);border:0;display:block" allow="fullscreen" allowfullscreen></iframe>`;
   document.getElementById('ov').classList.add('show');
 }
-function closeOv(){ document.getElementById('ov').classList.remove('show'); document.getElementById('ov-body').innerHTML=''; }
+async function commentOn(key){
+  const text=prompt('Add a comment to '+key+' (posts to Jira):'); if(text==null) return;
+  const t=text.trim(); if(!t) return;
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},body:JSON.stringify({action:'comment',key:key,text:t})});
+    const d=await r.json().catch(()=>({}));
+    alert(r.ok?('Comment posted to '+key+' ✓'):('Failed: '+(d.message||('HTTP '+r.status))));
+  }catch(e){ alert('Failed: '+e.message); }
+}
+function closeOv(){ const o=document.getElementById('ov'); o.classList.remove('show');
+  const m=document.getElementById('ov-modal'); m.classList.remove('full','wide');
+  const b=document.getElementById('ov-body'); b.classList.remove('flush'); b.innerHTML=''; }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv();});
 setTimeout(()=>document.getElementById('gate-inp').focus(),200);
 </script></body></html>
