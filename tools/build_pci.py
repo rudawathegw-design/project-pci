@@ -205,6 +205,10 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .wl-ev b{color:#475569;font-weight:700}
 .wl-tk a{font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;text-decoration:none;background:#eef2ff;color:#3730a3;padding:3px 8px;border-radius:7px;white-space:nowrap}
 .wl-tk .none{color:#cbd5e1;font-size:11px}
+.tk-live{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;margin-top:5px;color:#64748b}
+.tk-dot{width:7px;height:7px;border-radius:50%;background:#f59e0b}
+.tk-live.done .tk-dot{background:#10b981}.tk-live.done{color:#166534}
+.tk-live.todo .tk-dot{background:#94a3b8}
 .wl-more{display:none}.wl tr.exp .wl-more{display:block;margin-top:9px;padding-top:9px;border-top:1px dashed #e2e8f0}
 .wl-more .m1{font-size:12.5px;color:#334155;line-height:1.5;margin-top:5px}.wl-more .m1 b{color:#0f172a}
 .wl-acts{margin-top:9px;display:flex;gap:8px;flex-wrap:wrap}
@@ -384,6 +388,20 @@ async function loadGaps(){
     src.textContent='● live from Box'; src.style.color='var(--teal-d)';
   }catch(e){ GAPS=(PCI&&PCI.gaps)||{summary:{},areas:[]}; src.textContent='baseline snapshot (Box unavailable)'; }
   renderGaps();
+  loadFindingStatuses();
+}
+// Fetch live Jira status for every ticket referenced by a finding, in one call.
+async function loadFindingStatuses(){
+  if(!GH_PROXY||!WL_ALL.length) return;
+  const keys=[...new Set(WL_ALL.map(f=>jiraKey(f.jira)).filter(Boolean))];
+  if(!keys.length) return;
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'issues',keys})});
+    if(!r.ok) return; const d=await r.json();
+    (d.issues||[]).forEach(i=>_LIVE[i.key]=i);
+    renderWorklist();
+  }catch(e){}
 }
 let WL_ALL=[];
 function renderGaps(){
@@ -420,7 +438,8 @@ function renderWorklist(){
     const stTag=st==='closed'?'<span class="st-tag closed">Closed</span>':(st==='open'?'<span class="st-tag open">Open</span>':`<span class="st-tag na">${esc(f.status||'—')}</span>`);
     const key=jiraKey(f.jira);
     const live=key&&_LIVE[key]?_LIVE[key]:null;
-    const tk=key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>${live?'<div style="font-size:10px;color:#64748b;margin-top:3px">'+esc(live.status)+'</div>':''}`:'<span class="none">no ticket</span>';
+    const liveChip=live?`<div class="tk-live ${live.category==='done'?'done':(live.category==='new'?'todo':'prog')}"><span class="tk-dot"></span>${esc(live.status)}</div>`:'';
+    const tk=key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>${liveChip}`:'<span class="none">no ticket</span>';
     const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
     return `<tr class="f-open" onclick="this.classList.toggle('exp')">
       <td><div class="wl-area">${esc(f.area)}</div></td>

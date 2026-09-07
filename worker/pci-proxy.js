@@ -61,22 +61,26 @@ export default {
     if (body.action === "gaps") {
       const url = env.BOX_GAPS_URL;
       if (!url) return json(500, { message: "BOX_GAPS_URL not configured" });
-      const r = await fetch(url, { redirect: "follow", cf: { cacheTtl: 300, cacheEverything: true } });
+      const r = await fetch(url, { redirect: "follow", cf: { cacheTtl: 15, cacheEverything: true } });
       if (!r.ok) return json(502, { message: "Box fetch failed", status: r.status });
       const buf = await r.arrayBuffer();
       return new Response(buf, { status: 200, headers: {
         ...H,
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Cache-Control": "public, max-age=120",
+        "Cache-Control": "public, max-age=10",
       }});
     }
 
-    // ── Live FIBXPI issues (slim) — whole project, or one epic's children ──
+    // ── Live FIBXPI issues (slim) — whole project, one epic's children, or specific keys ──
     if (body.action === "issues") {
-      const parent = String(body.parent || env.JIRA_EPIC || "").trim();
-      const jql = parent
-        ? `parent = "${parent}" ORDER BY duedate ASC, key ASC`
-        : `project = "${project}" ORDER BY updated DESC`;
+      const parent = String(body.parent || "").trim();
+      const keys = Array.isArray(body.keys) ? body.keys
+        .map(k => String(k).trim().toUpperCase()).filter(k => /^[A-Z]+-\d+$/.test(k)).slice(0, 300) : [];
+      const jql = keys.length
+        ? `key in (${keys.map(k => `"${k}"`).join(",")}) ORDER BY key ASC`
+        : (parent || env.JIRA_EPIC)
+          ? `parent = "${parent || env.JIRA_EPIC}" ORDER BY duedate ASC, key ASC`
+          : `project = "${project}" ORDER BY updated DESC`;
       let issues = [], token = null;
       for (let i = 0; i < 12; i++) {           // cap ~1200 issues
         const qs = new URLSearchParams({ jql, maxResults: "100",
