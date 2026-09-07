@@ -217,7 +217,11 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .fib-tag{font-size:11px;font-weight:700;color:#475569}
 .fibsel{border:1px solid var(--line);border-radius:8px;padding:4px 6px;font-size:11.5px;font-weight:700;color:#334155;background:#fff;cursor:pointer;max-width:112px}
 .fibsel:hover{border-color:var(--teal)}.fibsel:disabled{opacity:.5;cursor:wait}
-.fibsel.pend{border-color:var(--amber);background:#fffbeb}
+.fibsel.v-done{background:#dcfce7;border-color:#86efac;color:#166534}
+.fibsel.v-prog{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+.fibsel.v-hold{background:#ffedd5;border-color:#fdba74;color:#9a3412}
+.fibsel.v-todo{background:#f1f5f9;border-color:#cbd5e1;color:#475569}
+.fibsel.pend{border-color:var(--amber);box-shadow:0 0 0 2px #fde68a}
 .pendtag{font-size:9.5px;font-weight:800;color:var(--amber);margin-top:3px;letter-spacing:.02em}
 .pen{border:1px solid var(--line);background:#fff;color:#64748b;border-radius:6px;padding:1px 6px;font-size:11px;cursor:pointer;margin-left:5px}
 .pen:hover{border-color:var(--teal);color:var(--teal-d)}
@@ -584,23 +588,66 @@ function _findCell(rowXml,cellRef){
   const close=rowXml.indexOf('</c>',gt);
   return {start,end:close<0?gt+1:close+4};
 }
-function _patchCell(xml,cellRef,value){
+// Read a cell's text, resolving shared strings, so we can find a cell that
+// already holds the value we're writing and borrow its formatting.
+function _parseShared(xml){
+  const out=[]; if(!xml) return out;
+  for(const m of xml.matchAll(/<si>([\s\S]*?)<\/si>/g)){
+    let s=''; for(const t of m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) s+=t[1];
+    out.push(s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'));
+  }
+  return out;
+}
+function _cellText(cx,shared){
+  const t=/\st="([^"]+)"/.exec(cx), ty=t?t[1]:'';
+  if(ty==='inlineStr'){ const m=/<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/.exec(cx); return m?m[1]:''; }
+  const v=/<v>([\s\S]*?)<\/v>/.exec(cx); if(!v) return '';
+  if(ty==='s'){ const i=parseInt(v[1],10); return shared[i]!==undefined?shared[i]:''; }
+  return v[1];
+}
+// Style index of an existing cell in the same column holding the same value —
+// that's how "Done" keeps its green, "In progress" its amber, etc.
+function _styleForValue(sheetXml,shared,col,value){
+  const want=String(value).trim().toLowerCase(); if(!want) return null;
+  const re=new RegExp('<c\\s[^>]*r="'+col+'\\d+"','g'); let m;
+  while((m=re.exec(sheetXml))){
+    const start=m.index, gt=sheetXml.indexOf('>',start); if(gt<0) continue;
+    let end;
+    if(sheetXml[gt-1]==='/') end=gt+1;
+    else { const c=sheetXml.indexOf('</c>',gt); end=c<0?gt+1:c+4; }
+    const cx=sheetXml.slice(start,end);
+    if(_cellText(cx,shared).trim().toLowerCase()===want){
+      const sm=/\ss="(\d+)"/.exec(cx); if(sm) return sm[1];
+    }
+  }
+  return null;
+}
+function _patchCell(xml,cellRef,value,shared){
   const rowNo=/^[A-Z]+(\d+)$/.exec(cellRef)[1];
+  const col=/^[A-Z]+/.exec(cellRef)[0];
   const rm=new RegExp('<row [^>]*r="'+rowNo+'"[^>]*>[\\s\\S]*?</row>').exec(xml);
   if(!rm) throw new Error('row '+rowNo+' not found');
   const rowXml=rm[0];
+  const matched=_styleForValue(xml,shared||[],col,value);   // borrow this value's own look
   const inline=st=>'<c r="'+cellRef+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+_xmlEsc(value)+'</t></is></c>';
   const hit=_findCell(rowXml,cellRef);
   let newRow;
   if(hit){
     const old=rowXml.slice(hit.start,hit.end);
     const sm=/\ss="(\d+)"/.exec(old);
-    newRow=rowXml.slice(0,hit.start)+inline(sm?' s="'+sm[1]+'"':'')+rowXml.slice(hit.end);
+    const st=matched||(sm?sm[1]:null);
+    newRow=rowXml.slice(0,hit.start)+inline(st?' s="'+st+'"':'')+rowXml.slice(hit.end);
   }else{
+    // no cell yet — borrow the column's look from the row above so it isn't blank/white
+    let st=matched;
+    if(!st){
+      const above=_findCell(rowXml,col+rowNo);
+      if(!above){ const prev=new RegExp('<c\\s[^>]*r="'+col+'(\\d+)"[^>]*\\ss="(\\d+)"').exec(xml); if(prev) st=prev[2]; }
+    }
     const target=_colNum(cellRef); let at=null;
     for(const c of rowXml.matchAll(/<c\s[^>]*r="([A-Z]+)\d+"/g)){ if(_colNum(c[1]+'1')>target){ at=c.index; break; } }
     if(at===null) at=rowXml.lastIndexOf('</row>');
-    newRow=rowXml.slice(0,at)+inline('')+rowXml.slice(at);
+    newRow=rowXml.slice(0,at)+inline(st?' s="'+st+'"':'')+rowXml.slice(at);
   }
   return xml.slice(0,rm.index)+newRow+xml.slice(rm.index+rowXml.length);
 }
@@ -624,12 +671,14 @@ async function exportWorkbook(){
       }
       return null;
     };
+    const ssFile=zip.file('xl/sharedStrings.xml');
+    const shared=_parseShared(ssFile?await ssFile.async('string'):'');
     const byPath={};
     for(const k of Object.keys(OVERLAY)){
       const e=OVERLAY[k], p=pathFor(e.sheet);
       if(!p||!zip.file(p)) continue;
       if(!byPath[p]) byPath[p]=await zip.file(p).async('string');
-      byPath[p]=_patchCell(byPath[p],e.cell,e.value);
+      byPath[p]=_patchCell(byPath[p],e.cell,e.value,shared);
     }
     let n=0;
     for(const p of Object.keys(byPath)){ zip.file(p,byPath[p]); n++; }
@@ -713,8 +762,10 @@ function renderWorklist(){
     const liveChip=live?`<div class="tk-live ${live.category==='done'?'done':(live.category==='new'?'todo':'prog')}"><span class="tk-dot"></span>${esc(live.status)}</div>`:'';
     const pen=f._cLink?`<button class="pen" title="Edit ticket — saves to the Box workbook" onclick="event.stopPropagation();editTicket(${f._i})">✎</button>`:'';
     const tk=(key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>`:'<span class="none">no ticket</span>')+pen+liveChip;
+    const fs=(f.fib_status||'').toLowerCase();
+    const fcls=fs.includes('done')?' v-done':(fs.includes('progress')?' v-prog':(fs.includes('hold')?' v-hold':(fs.includes('not start')?' v-todo':'')));
     const fibCell=(f._cFib
-      ? `<select class="fibsel${f._pendFib?' pend':''}" onclick="event.stopPropagation()" onchange="saveCell(${f._i},'fib_status',this.value,this)">`+
+      ? `<select class="fibsel${fcls}${f._pendFib?' pend':''}" onclick="event.stopPropagation()" onchange="saveCell(${f._i},'fib_status',this.value,this)">`+
         FIB_OPTS.map(o=>`<option value="${esc(o)}"${(f.fib_status||'')===o?' selected':''}>${esc(o||'—')}</option>`).join('')+`</select>`
       : `<span class="fib-tag">${esc(f.fib_status||'—')}</span>`)
       +(f._pendFib?'<div class="pendtag">● not in Box yet</div>':'');

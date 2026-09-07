@@ -38,12 +38,46 @@ function findCell(rowXml, cellRef) {
   const close = rowXml.indexOf("</c>", gt);
   return { start, end: close < 0 ? gt + 1 : close + 4 };
 }
+function parseShared(xml) {
+  const out = []; if (!xml) return out;
+  for (const m of xml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+    let s = ""; for (const t of m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) s += t[1];
+    out.push(s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"));
+  }
+  return out;
+}
+function cellText(cx, shared) {
+  const t = /\st="([^"]+)"/.exec(cx), ty = t ? t[1] : "";
+  if (ty === "inlineStr") { const m = /<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/.exec(cx); return m ? m[1] : ""; }
+  const v = /<v>([\s\S]*?)<\/v>/.exec(cx); if (!v) return "";
+  if (ty === "s") { const i = parseInt(v[1], 10); return shared[i] !== undefined ? shared[i] : ""; }
+  return v[1];
+}
+// Borrow the style of an existing cell in the same column that already holds
+// this value, so "Done" keeps its green, "In progress" its amber, etc.
+function styleForValue(sheetXml, shared, col, value) {
+  const want = String(value).trim().toLowerCase(); if (!want) return null;
+  const re = new RegExp(`<c\\s[^>]*r="${col}\\d+"`, "g"); let m;
+  while ((m = re.exec(sheetXml))) {
+    const start = m.index, gt = sheetXml.indexOf(">", start); if (gt < 0) continue;
+    let end;
+    if (sheetXml[gt - 1] === "/") end = gt + 1;
+    else { const c = sheetXml.indexOf("</c>", gt); end = c < 0 ? gt + 1 : c + 4; }
+    const cx = sheetXml.slice(start, end);
+    if (cellText(cx, shared).trim().toLowerCase() === want) {
+      const sm = /\ss="(\d+)"/.exec(cx); if (sm) return sm[1];
+    }
+  }
+  return null;
+}
 // Replace (or insert) one cell as an inline string, keeping its style index.
-function patchCell(sheetXml, cellRef, value) {
+function patchCell(sheetXml, cellRef, value, shared) {
   const rowNo = /^[A-Z]+(\d+)$/.exec(cellRef)[1];
+  const col = /^[A-Z]+/.exec(cellRef)[0];
   const rm = new RegExp(`<row [^>]*r="${rowNo}"[^>]*>[\\s\\S]*?</row>`).exec(sheetXml);
   if (!rm) throw new Error(`row ${rowNo} not found`);
   const rowXml = rm[0];
+  const matched = styleForValue(sheetXml, shared || [], col, value);
   const inline = (style) =>
     `<c r="${cellRef}"${style} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(value)}</t></is></c>`;
   const hit = findCell(rowXml, cellRef);
@@ -51,7 +85,8 @@ function patchCell(sheetXml, cellRef, value) {
   if (hit) {
     const old = rowXml.slice(hit.start, hit.end);
     const sm = /\ss="(\d+)"/.exec(old);
-    newRow = rowXml.slice(0, hit.start) + inline(sm ? ` s="${sm[1]}"` : "") + rowXml.slice(hit.end);
+    const st = matched || (sm ? sm[1] : null);
+    newRow = rowXml.slice(0, hit.start) + inline(st ? ` s="${st}"` : "") + rowXml.slice(hit.end);
   } else {
     const target = colNum(cellRef);
     let at = null;
@@ -59,7 +94,9 @@ function patchCell(sheetXml, cellRef, value) {
       if (colNum(c[1] + "1") > target) { at = c.index; break; }
     }
     if (at === null) at = rowXml.lastIndexOf("</row>");
-    newRow = rowXml.slice(0, at) + inline("") + rowXml.slice(at);
+    let st = matched;
+    if (!st) { const prev = new RegExp(`<c\\s[^>]*r="${col}(\\d+)"[^>]*\\ss="(\\d+)"`).exec(sheetXml); if (prev) st = prev[2]; }
+    newRow = rowXml.slice(0, at) + inline(st ? ` s="${st}"` : "") + rowXml.slice(at);
   }
   return sheetXml.slice(0, rm.index) + newRow + sheetXml.slice(rm.index + rowXml.length);
 }
@@ -306,7 +343,7 @@ export default {
       const path = sheetPathFor(files, sheet);
       if (!path || !files[path]) return json(400, { message: `Sheet "${sheet}" not found` });
       let xml;
-      try { xml = patchCell(strFromU8(files[path]), cell, value); }
+      try { xml = patchCell(strFromU8(files[path]), cell, value, parseShared(files["xl/sharedStrings.xml"] ? strFromU8(files["xl/sharedStrings.xml"]) : "")); }
       catch (e) { return json(400, { message: "Patch failed: " + (e.message || e) }); }
       files[path] = strToU8(xml);
       const out = zipSync(files, { level: 6 });
