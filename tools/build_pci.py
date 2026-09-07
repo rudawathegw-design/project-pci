@@ -609,7 +609,7 @@ function _cellText(cx,shared){
 // that's how "Done" keeps its green, "In progress" its amber, etc.
 function _styleForValue(sheetXml,shared,col,value){
   const want=String(value).trim().toLowerCase(); if(!want) return null;
-  const re=new RegExp('<c\\s[^>]*r="'+col+'\\d+"','g'); let m;
+  const re=new RegExp('<c\\s[^>]*r="'+(col||'[A-Z]+')+'\\d+"','g'); let m;
   while((m=re.exec(sheetXml))){
     const start=m.index, gt=sheetXml.indexOf('>',start); if(gt<0) continue;
     let end;
@@ -622,13 +622,14 @@ function _styleForValue(sheetXml,shared,col,value){
   }
   return null;
 }
-function _patchCell(xml,cellRef,value,shared){
+function _patchCell(xml,cellRef,value,shared,styleHint){
   const rowNo=/^[A-Z]+(\d+)$/.exec(cellRef)[1];
   const col=/^[A-Z]+/.exec(cellRef)[0];
   const rm=new RegExp('<row [^>]*r="'+rowNo+'"[^>]*>[\\s\\S]*?</row>').exec(xml);
   if(!rm) throw new Error('row '+rowNo+' not found');
   const rowXml=rm[0];
-  const matched=_styleForValue(xml,shared||[],col,value);   // borrow this value's own look
+  // this value's own look: same sheet+column first, else borrowed from any sheet
+  const matched=_styleForValue(xml,shared||[],col,value)||styleHint||null;
   const inline=st=>'<c r="'+cellRef+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+_xmlEsc(value)+'</t></is></c>';
   const hit=_findCell(rowXml,cellRef);
   let newRow;
@@ -673,12 +674,31 @@ async function exportWorkbook(){
     };
     const ssFile=zip.file('xl/sharedStrings.xml');
     const shared=_parseShared(ssFile?await ssFile.async('string'):'');
+    // Style indexes are workbook-wide, so a colour used for "In Progress" on ANY
+    // sheet can be reused here — that's how an edited cell keeps the right fill.
+    const allXml=[];
+    for(const m of wbXml.matchAll(/r:id="([^"]*)"/g)){
+      const rel=new RegExp('<Relationship[^>]*Id="'+m[1]+'"[^>]*Target="([^"]*)"').exec(relsXml);
+      const p=rel?('xl/'+rel[2].replace(/^\/?xl\//,'')):null;
+      if(p&&/worksheets\//.test(p)&&zip.file(p)) allXml.push(await zip.file(p).async('string'));
+    }
+    const hints={};
+    for(const k of Object.keys(OVERLAY)){
+      const e=OVERLAY[k]; if(e.field!=='fib_status') continue;
+      const key=String(e.value).trim().toLowerCase();
+      if(!key||hints[key]!==undefined) continue;
+      const col=/^[A-Z]+/.exec(e.cell)[0];
+      let s=null;
+      for(const sx of allXml){ s=_styleForValue(sx,shared,col,e.value); if(s) break; }
+      if(!s) for(const sx of allXml){ s=_styleForValue(sx,shared,null,e.value); if(s) break; }
+      hints[key]=s;
+    }
     const byPath={};
     for(const k of Object.keys(OVERLAY)){
       const e=OVERLAY[k], p=pathFor(e.sheet);
       if(!p||!zip.file(p)) continue;
       if(!byPath[p]) byPath[p]=await zip.file(p).async('string');
-      byPath[p]=_patchCell(byPath[p],e.cell,e.value,shared);
+      byPath[p]=_patchCell(byPath[p],e.cell,e.value,shared,hints[String(e.value).trim().toLowerCase()]);
     }
     let n=0;
     for(const p of Object.keys(byPath)){ zip.file(p,byPath[p]); n++; }
