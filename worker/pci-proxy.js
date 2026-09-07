@@ -53,9 +53,30 @@ export default {
 
     if (body.action === "verify") return json(200, { ok: true });
 
-    // ── Live FIBXPI issues (slim) ──
+    // ── Live gap workbook: stream the public Box .xlsx to the cockpit ──
+    // Box blocks cross-origin browser fetches, but the Worker has no CORS, so
+    // it pulls the file and re-serves the raw bytes with our own CORS headers.
+    // The cockpit parses the workbook client-side (SheetJS). Cached briefly so
+    // repeated unlocks don't hammer Box.
+    if (body.action === "gaps") {
+      const url = env.BOX_GAPS_URL;
+      if (!url) return json(500, { message: "BOX_GAPS_URL not configured" });
+      const r = await fetch(url, { redirect: "follow", cf: { cacheTtl: 300, cacheEverything: true } });
+      if (!r.ok) return json(502, { message: "Box fetch failed", status: r.status });
+      const buf = await r.arrayBuffer();
+      return new Response(buf, { status: 200, headers: {
+        ...H,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Cache-Control": "public, max-age=120",
+      }});
+    }
+
+    // ── Live FIBXPI issues (slim) — whole project, or one epic's children ──
     if (body.action === "issues") {
-      const jql = `project = "${project}" ORDER BY updated DESC`;
+      const parent = String(body.parent || env.JIRA_EPIC || "").trim();
+      const jql = parent
+        ? `parent = "${parent}" ORDER BY duedate ASC, key ASC`
+        : `project = "${project}" ORDER BY updated DESC`;
       let issues = [], token = null;
       for (let i = 0; i < 12; i++) {           // cap ~1200 issues
         const qs = new URLSearchParams({ jql, maxResults: "100",

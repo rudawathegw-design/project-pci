@@ -6,3 +6,8 @@ compatibility_date = "2024-11-01"
 ALLOWED_ORIGIN = "https://fibpmo.com,https://www.fibpmo.com,https://rudawathegw-design.github.io"
 JIRA_BASE_URL = "https://fibtask.atlassian.net"
 JIRA_PROJECT = "FIBXPI"
+JIRA_EPIC = "FIBXPI-49"
+# Public Box shared-file direct-download URL for the Assessment Gap Report.xlsx.
+# The share is "anyone with the link · view and download", so the Worker can
+# fetch it server-side (no CORS, no login) and hand the bytes to the cockpit.
+BOX_GAPS_URL = "https://ejabi-infosec.box.com/index.php?rm=box_download_shared_file&shared_name=aa38b8t7vyhe5xazjw8ycqwhnklwh4j2&file_id=f_2411611826029"

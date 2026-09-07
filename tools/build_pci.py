@@ -155,6 +155,32 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .lr-days{font-size:12px;font-weight:800;color:var(--red);white-space:nowrap}
 @media(max-width:640px){.live-row{grid-template-columns:80px 1fr auto}.lr-st{display:none}}
 .foot{color:var(--slate);font-size:11.5px;text-align:center;margin:24px 0 8px}
+/* Assessment timeline (Jira epic) */
+.tl{display:flex;overflow-x:auto;padding:16px 4px 8px}
+.tl-node{flex:1 0 158px;min-width:158px;position:relative;padding:28px 8px 0;text-align:center;cursor:pointer}
+.tl-node::before{content:"";position:absolute;top:13px;left:0;right:0;height:4px;background:#e2e8f0}
+.tl-node:first-child::before{left:50%}.tl-node:last-child::before{right:50%}
+.tl-node.done::before{background:var(--green)}
+.tl-dot{position:absolute;top:4px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid #cbd5e1;z-index:2;display:grid;place-items:center;font-size:11px;font-weight:900;color:#94a3b8}
+.tl-node.done .tl-dot{background:var(--green);border-color:var(--green);color:#fff}
+.tl-node.prog .tl-dot{background:var(--teal);border-color:var(--teal);color:#fff}
+.tl-node.over .tl-dot{background:var(--red);border-color:var(--red);color:#fff}
+.tl-key{font-family:ui-monospace,monospace;font-size:11px;font-weight:800;color:var(--teal-d)}
+.tl-name{font-size:11.5px;color:#334155;line-height:1.25;margin-top:3px;height:29px;overflow:hidden}
+.tl-due{font-size:10.5px;font-weight:800;margin-top:5px;color:var(--slate)}
+.tl-node.over .tl-due{color:var(--red)}
+.tl-node:hover .tl-name{color:var(--teal-d)}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--sub);font-weight:600}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
+/* Owners */
+.own-row{display:grid;grid-template-columns:150px 1fr 90px;gap:12px;align-items:center;padding:8px 2px}
+.own-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.own-bar{height:9px;border-radius:999px;background:#eef2f6;overflow:hidden}
+.own-bar i{display:block;height:100%;border-radius:999px;background:var(--green)}
+.own-meta{font-size:11.5px;color:var(--sub);font-weight:700;text-align:right}
+.own-meta b.over{color:var(--red)}
+/* task modal */
+.tm-row{font-size:13.5px;color:#334155;margin-top:8px;line-height:1.5}.tm-row b{color:#0f172a}
 </style></head>
 <body>
 <div id="gate"><div class="gate-card">
@@ -180,14 +206,17 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   </div>
   <div class="hero">
     <div class="hcard dark"><div class="hflex">
-      <div><div class="hlbl">Journey to certification</div><div class="hbig" id="road-pct">0%</div><div class="hsub" id="road-sub">—</div></div>
-      <div class="ring" id="road-ring"><i id="road-ring-n">0%</i></div></div></div>
-    <div class="hcard"><div class="hlbl">Gap remediation</div><div class="hbig" id="gap-pct" style="color:var(--teal-d)">0%</div><div class="hsub" id="gap-sub">—</div></div>
-    <div class="hcard"><div class="hlbl">Current phase</div><div class="hbig" id="cur-phase" style="font-size:22px;line-height:1.15;margin-top:12px">—</div><div class="hsub" id="cur-sub">—</div></div>
+      <div><div class="hlbl">Gap remediation</div><div class="hbig" id="gap-pct">0%</div><div class="hsub" id="gap-sub">—</div></div>
+      <div class="ring" id="gap-ring"><i id="gap-ring-n">0%</i></div></div></div>
+    <div class="hcard"><div class="hlbl">Open findings</div><div class="hbig" id="find-open" style="color:var(--red)">—</div><div class="hsub" id="find-sub">—</div></div>
+    <div class="hcard"><div class="hlbl">Assessment tasks</div><div class="hbig" id="task-big" style="font-size:36px;margin-top:8px">—</div><div class="hsub" id="task-sub">—</div></div>
   </div>
-  <div class="sec"><div class="sec-h"><div class="sec-t">Project journey <small>start → certification</small></div></div><div class="journey" id="journey"></div></div>
-  <div class="sec" id="live-sec" style="display:none"><div class="sec-h"><div class="sec-t">Overdue &amp; at-risk <small id="live-sub">live from Jira FIBXPI</small></div></div><div id="live-list"></div></div>
-  <div class="sec"><div class="sec-h"><div class="sec-t">Gap remediation by area <small id="gap-count"></small></div></div><div class="gaps" id="gaps"></div></div>
+  <div class="sec"><div class="sec-h"><div class="sec-t">Assessment timeline <small id="tl-sub">start → certification</small></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Done</span><span><i style="background:var(--teal)"></i>In&nbsp;progress</span><span><i style="background:var(--red)"></i>Overdue</span></div></div>
+    <div class="tl" id="timeline"><div style="color:#94a3b8;font-size:13px;padding:8px">Loading live from Jira…</div></div></div>
+  <div class="sec" id="live-sec" style="display:none"><div class="sec-h"><div class="sec-t">Overdue &amp; at-risk <small id="live-sub">live from Jira</small></div></div><div id="live-list"></div></div>
+  <div class="sec"><div class="sec-h"><div class="sec-t">Gap remediation by area <small id="gap-count"></small></div><span class="hsub" id="gap-src" style="margin:0"></span></div><div class="gaps" id="gaps"><div style="color:#94a3b8;font-size:13px;padding:8px">Loading live from Box…</div></div></div>
+  <div class="sec" id="own-sec" style="display:none"><div class="sec-h"><div class="sec-t">Owners <small>assessment task load</small></div></div><div id="owners"></div></div>
   <div class="sec"><div class="sec-h"><div class="sec-t">Documents &amp; evidence <small>opens full-screen from Box</small></div></div>
     <div class="ev-row" id="ev-row"></div>
   </div>
@@ -197,11 +226,12 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   <div class="m-head"><h3 id="ov-title">Area</h3><button class="m-close" onclick="closeOv()">Close</button></div>
   <div class="m-body" id="ov-body"></div>
 </div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const ENC = /*__ENC__*/{};
 const EVIDENCE = /*__EVIDENCE__*/{};
 const GH_PROXY = "__GH_PROXY__";
-let PCI = null;
+let PCI = null, GAPS = null, EPIC = [];
 const esc = s => { const d=document.createElement('div'); d.textContent=(s==null?'':String(s)); return d.innerHTML; };
 function _b64dec(s){ return Uint8Array.from(atob(s), c=>c.charCodeAt(0)); }
 async function _deriveKey(pw, salt, iter){
@@ -235,74 +265,167 @@ function endIntro(){ const w=document.getElementById('intro'); w.style.transitio
   setTimeout(()=>{ w.style.display='none'; document.getElementById('app').style.display='block'; },500); }
 function statusColor(p){ return p>=80?'var(--green)':p>=40?'var(--amber)':'var(--red)'; }
 function jiraKey(u){ const m=/([A-Z]+-\d+)/.exec(u||''); return m?m[1]:''; }
+const TODAY=new Date().toISOString().slice(0,10);
+function daysLate(due){ return Math.round((Date.now()-new Date(due).getTime())/86400000); }
+
 function render(){
   document.getElementById('proj').textContent=PCI.project||'';
   document.getElementById('gen').textContent='Updated '+(PCI.generated||'');
   document.getElementById('gen2').textContent=PCI.generated||'';
   document.getElementById('app').style.display='block';
-  const phases=(PCI.roadmap&&PCI.roadmap.phases)||[];
-  let td=0,tt=0; phases.forEach(p=>{td+=p.done||0;tt+=p.total||0;});
-  const roadPct=tt?Math.round(100*td/tt):0;
-  document.getElementById('road-pct').textContent=roadPct+'%';
-  document.getElementById('road-ring').style.setProperty('--p',roadPct);
-  document.getElementById('road-ring-n').textContent=roadPct+'%';
-  document.getElementById('road-sub').textContent=td+' of '+tt+' plan tasks complete · '+phases.length+' phases';
-  const gs=(PCI.gaps&&PCI.gaps.summary)||{};
+  document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>`<div class="ev-btn" onclick="openEvidence('${e.k}')"><div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
+  loadGaps();   // live gap workbook from Box → remediation bar + area cards
+  loadEpic();   // live Jira epic FIBXPI-49 → timeline + overdue + owners
+}
+
+// ── Parse the Box gap workbook (SheetJS) into {summary, areas[]} ──
+function parseGaps(wb){
+  const norm=s=>String(s==null?'':s).replace(/\s+/g,' ').trim();
+  const rowsOf=ws=>XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  const areas=[]; let summary={open:0,closed:0,total:0,pct:0}; const byName={};
+  const sumName=wb.SheetNames.find(n=>/summary/i.test(n));
+  if(sumName){
+    let started=false;
+    for(const r of rowsOf(wb.Sheets[sumName])){
+      const a=norm(r[0]);
+      if(!started){ if(/^review sheet$/i.test(a)) started=true; continue; }
+      if(!a) continue;
+      const open=+r[1]||0, closed=+r[2]||0, total=+r[3]||0, pct=total?Math.round(100*closed/total):0;
+      if(/^total$/i.test(a)){ summary={open,closed,total,pct}; continue; }
+      const area={name:a,open,closed,total,pct,findings:[]}; areas.push(area); byName[a.toLowerCase()]=area;
+    }
+  }
+  for(const sn of wb.SheetNames){
+    if(/summary/i.test(sn)) continue;
+    const rows=rowsOf(wb.Sheets[sn]);
+    let hi=-1; for(let i=0;i<rows.length;i++){ if(rows[i].some(c=>/^sr\.?\s*no/i.test(norm(c)))){ hi=i; break; } }
+    if(hi<0) continue;
+    const hdr=rows[hi].map(c=>norm(c).toLowerCase());
+    const col=(...names)=>{ for(let j=0;j<hdr.length;j++) if(names.some(nm=>hdr[j].includes(nm))) return j; return -1; };
+    const ci={section:col('section'),obs:col('observation'),rec:col('recommendation'),ev:col('evidence req','evidence'),status:col('status'),assessor:col('assessor'),client:col('client comment'),fib:col('fib status'),link:col('link')};
+    const findings=[];
+    for(const r of rows.slice(hi+1)){
+      const section=ci.section>=0?norm(r[ci.section]):'', obs=ci.obs>=0?norm(r[ci.obs]):'';
+      if(!section&&!obs) continue;
+      const stRaw=ci.status>=0?norm(r[ci.status]).toLowerCase():'';
+      const status=stRaw.includes('clos')?'Closed':(stRaw.includes('open')?'Open':(ci.status>=0?norm(r[ci.status]):''));
+      let jira=ci.link>=0&&/atlassian/.test(norm(r[ci.link]))?norm(r[ci.link]):'';
+      if(!jira) for(const c of r){ const s=norm(c); if(/atlassian\.net\/browse\//.test(s)){ jira=s; break; } }
+      findings.push({section,observation:obs,recommendation:ci.rec>=0?norm(r[ci.rec]):'',
+        evidence_required:ci.ev>=0?norm(r[ci.ev]):'',status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
+        assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira});
+    }
+    const key=norm(sn).toLowerCase();
+    let area=byName[key]||areas.find(a=>key.startsWith(a.name.toLowerCase())||a.name.toLowerCase().startsWith(key));
+    if(area){ area.findings=findings; }
+    else{ const o=findings.filter(f=>f.status==='Open').length,c=findings.filter(f=>f.status==='Closed').length,t=findings.length;
+      areas.push({name:norm(sn),open:o,closed:c,total:t,pct:t?Math.round(100*c/t):0,findings}); }
+  }
+  return {summary,areas};
+}
+async function loadGaps(){
+  const pw=sessionStorage.getItem('pci_pw')||'', src=document.getElementById('gap-src');
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'gaps'})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    GAPS=parseGaps(XLSX.read(await r.arrayBuffer(),{type:'array'}));
+    src.textContent='● live from Box'; src.style.color='var(--teal-d)';
+  }catch(e){ GAPS=(PCI&&PCI.gaps)||{summary:{},areas:[]}; src.textContent='baseline snapshot (Box unavailable)'; }
+  renderGaps();
+}
+function renderGaps(){
+  const gs=GAPS.summary||{}, areas=GAPS.areas||[];
   document.getElementById('gap-pct').textContent=(gs.pct||0)+'%';
+  document.getElementById('gap-ring').style.setProperty('--p',gs.pct||0);
+  document.getElementById('gap-ring-n').textContent=(gs.pct||0)+'%';
   document.getElementById('gap-sub').textContent=(gs.closed||0)+' of '+(gs.total||0)+' findings closed';
-  const active=[...phases].reverse().find(p=>p.status==='In Progress')||phases.find(p=>p.status!=='Completed')||phases[phases.length-1];
-  document.getElementById('cur-phase').textContent=active?active.title:'—';
-  document.getElementById('cur-sub').textContent=active?(active.pct+'% · '+active.done+'/'+active.total+' tasks'):'';
-  document.getElementById('journey').innerHTML=phases.map((p,i)=>{
-    const done=p.status==='Completed', act=p===active&&!done, cls=done?'done':(act?'active':'');
-    return `<div class="jp ${cls}"><div class="bar"><i style="width:${p.pct||0}%"></i></div>
-      <div class="dot">${done?'✓':(i+1)}</div><div class="jp-name">${esc(p.title)}</div>
-      <div class="jp-meta">${p.pct||0}% · ${p.done||0}/${p.total||0}</div></div>`;
-  }).join('');
-  const areas=(PCI.gaps&&PCI.gaps.areas)||[];
+  document.getElementById('find-open').textContent=(gs.open||0);
+  document.getElementById('find-sub').textContent=(gs.open||0)+' open · '+(gs.closed||0)+' closed of '+(gs.total||0)+' findings';
   document.getElementById('gap-count').textContent=areas.length+' areas · '+(gs.total||0)+' findings';
-  document.getElementById('gaps').innerHTML=areas.map((a,idx)=>{
-    const col=statusColor(a.pct);
+  document.getElementById('gaps').innerHTML=areas.slice().sort((a,b)=>b.pct-a.pct).map(a=>{
+    const col=statusColor(a.pct), idx=areas.indexOf(a);
     return `<div class="gcard" onclick="openArea(${idx})"><div class="gc-top"><div class="gc-name">${esc(a.name)}</div>
       <div class="gc-pct" style="color:${col}">${a.pct}%</div></div>
       <div class="gc-bar"><i style="width:${a.pct}%;background:${col}"></i></div>
       <div class="gc-meta"><span class="pill"><span class="dot-o"></span> <b>${a.open}</b> open</span>
       <span class="pill"><span class="dot-c"></span> <b>${a.closed}</b> closed</span>
       <span style="margin-left:auto">${a.total} total</span></div></div>`;
-  }).join('');
-  document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>`<div class="ev-btn" onclick="openEvidence('${e.k}')"><div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
-  loadLive();
+  }).join('')||'<div style="color:#94a3b8;font-size:13px;padding:8px">No areas found.</div>';
 }
-// ── Live FIBXPI (status + overdue) via the worker ──
-let _LIVE = {};
-async function loadLive(){
+
+// ── Live Jira epic FIBXPI-49 → timeline, overdue, owners, tasks card ──
+let _LIVE={};
+async function loadEpic(){
   if(!GH_PROXY) return;
   const pw=sessionStorage.getItem('pci_pw')||'';
   try{
     const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'issues'})});
-    if(!r.ok) return; const d=await r.json();
-    const map={}; (d.issues||[]).forEach(i=>map[i.key]=i); _LIVE=map;
-    const today=new Date().toISOString().slice(0,10);
-    const overdue=(d.issues||[]).filter(i=>i.due && i.category!=='done' && i.due<today)
-      .sort((a,b)=>a.due<b.due?-1:1);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json(); EPIC=d.issues||[]; _LIVE={}; EPIC.forEach(i=>_LIVE[i.key]=i);
+    const cls=i=>i.category==='done'?'done':((i.due&&i.due<TODAY)?'over':'prog');
+    const done=EPIC.filter(i=>i.category==='done').length;
+    const overdue=EPIC.filter(i=>i.due&&i.category!=='done'&&i.due<TODAY).sort((a,b)=>a.due<b.due?-1:1);
+    // hero card
+    document.getElementById('task-big').textContent=done+' / '+EPIC.length;
+    document.getElementById('task-sub').innerHTML=(EPIC.length-done)+' remaining · '+
+      (overdue.length?'<b style="color:var(--red)">'+overdue.length+' overdue</b>':'none overdue');
+    // timeline (sorted by due asc, already from worker)
+    document.getElementById('tl-sub').textContent='start → certification · live from Jira · '+EPIC.length+' tasks';
+    document.getElementById('timeline').innerHTML=EPIC.map(i=>{
+      const c=cls(i), mark=c==='done'?'✓':(c==='over'?'!':'●');
+      const due=i.due?new Date(i.due).toLocaleDateString(undefined,{month:'short',year:'2-digit'}):'—';
+      const late=(c==='over')?' · '+daysLate(i.due)+'d late':'';
+      return `<div class="tl-node ${c}" onclick="openTask('${esc(i.key)}')" title="${esc(i.summary)}">
+        <div class="tl-dot">${mark}</div><div class="tl-key">${esc(i.key)}</div>
+        <div class="tl-name">${esc(i.summary)}</div><div class="tl-due">${esc(due)}${late}</div></div>`;
+    }).join('')||'<div style="color:#94a3b8;padding:8px">No tasks in this epic.</div>';
+    // overdue list
     const sec=document.getElementById('live-sec'), list=document.getElementById('live-list');
-    document.getElementById('live-sub').textContent='live from Jira FIBXPI · '+(d.count||0)+' issues · '+overdue.length+' overdue';
-    if(!overdue.length){ list.innerHTML='<div style="color:#64748b;font-size:13px;padding:6px 2px">Nothing overdue right now. 🎉</div>'; }
-    else{
-      list.innerHTML='<div class="live-grid">'+overdue.slice(0,60).map(i=>{
-        const days=Math.round((Date.now()-new Date(i.due).getTime())/86400000);
-        return `<a class="live-row" href="https://fibtask.atlassian.net/browse/${esc(i.key)}" target="_blank" rel="noopener">
-          <span class="lr-key">${esc(i.key)}</span>
-          <span class="lr-sum">${esc(i.summary)}</span>
-          <span class="lr-st">${esc(i.status)}</span>
-          <span class="lr-days">${days}d</span></a>`;
-      }).join('')+'</div>';
-    }
+    document.getElementById('live-sub').textContent='live from Jira · epic '+esc(EPIC[0]?'FIBXPI-49':'')+' · '+overdue.length+' overdue';
+    list.innerHTML=overdue.length?('<div class="live-grid">'+overdue.map(i=>`
+      <div class="live-row">
+        <span class="lr-key">${esc(i.key)}</span>
+        <span class="lr-sum">${esc(i.summary)}</span>
+        <span class="lr-st">${esc(i.assignee||'—')}</span>
+        <span class="lr-days">${daysLate(i.due)}d</span>
+        <button class="cbtn" style="padding:4px 9px" onclick="commentOn('${esc(i.key)}')">💬</button></div>`).join('')+'</div>')
+      :'<div style="color:#64748b;font-size:13px;padding:6px 2px">Nothing overdue in this epic. 🎉</div>';
     sec.style.display='';
-  }catch(e){}
+    // owners
+    const own={}; EPIC.forEach(i=>{ const o=i.assignee||'Unassigned'; (own[o]=own[o]||{d:0,t:0,o:0}); own[o].t++; if(i.category==='done')own[o].d++; if(i.due&&i.category!=='done'&&i.due<TODAY)own[o].o++; });
+    const rows=Object.entries(own).sort((a,b)=>b[1].t-a[1].t);
+    document.getElementById('owners').innerHTML=rows.map(([n,s])=>{
+      const pct=s.t?Math.round(100*s.d/s.t):0;
+      return `<div class="own-row"><div class="own-name">${esc(n)}</div>
+        <div class="own-bar"><i style="width:${pct}%"></i></div>
+        <div class="own-meta">${s.d}/${s.t} done${s.o?' · <b class="over">'+s.o+' late</b>':''}</div></div>`;
+    }).join('');
+    document.getElementById('own-sec').style.display='';
+  }catch(e){ document.getElementById('timeline').innerHTML='<div style="color:#94a3b8;padding:8px">Live Jira unavailable.</div>'; }
+}
+function openTask(key){
+  const i=_LIVE[key]; if(!i) return;
+  const over=i.due&&i.category!=='done'&&i.due<TODAY;
+  const m=document.getElementById('ov-modal'); m.classList.remove('full','wide');
+  document.getElementById('ov-body').classList.remove('flush');
+  document.getElementById('ov-title').textContent=key+' — '+i.summary;
+  document.getElementById('ov-body').innerHTML=`
+    <div class="tm-row"><b>Status:</b> ${esc(i.status)}${over?' <span class="tag open">'+daysLate(i.due)+'d overdue</span>':''}</div>
+    <div class="tm-row"><b>Owner:</b> ${esc(i.assignee||'—')}</div>
+    <div class="tm-row"><b>Due:</b> ${esc(i.due||'—')} &nbsp; <b>Priority:</b> ${esc(i.priority||'—')} &nbsp; <b>Type:</b> ${esc(i.type||'—')}</div>
+    <div class="f-links" style="margin-top:14px">
+      <a href="https://fibtask.atlassian.net/browse/${esc(key)}" target="_blank" rel="noopener">Open ${esc(key)} in Jira ↗</a>
+      <button class="cbtn" onclick="commentOn('${esc(key)}')">💬 Comment</button>
+      <button class="cbtn" onclick="nudge('${esc(key)}','${esc((i.assignee||'').split(' ')[0])}')">✉ Nudge owner</button>
+    </div>`;
+  document.getElementById('ov').classList.add('show');
+}
+function nudge(key,who){
+  const pre=(who?who+', ':'')+'please share the latest status and upload the required evidence for '+key+'. Thank you.';
+  commentOn(key,pre);
 }
 function openArea(idx){
-  const a=(PCI.gaps.areas||[])[idx]; if(!a) return;
+  const a=(GAPS.areas||[])[idx]; if(!a) return;
   document.getElementById('ov-modal').classList.remove('wide');
   document.getElementById('ov-body').classList.remove('flush');
   document.getElementById('ov-title').textContent=a.name+' — '+a.closed+'/'+a.total+' closed ('+a.pct+'%)';
@@ -331,8 +454,8 @@ function openEvidence(k){
   b.innerHTML=`<iframe src="${esc(e.url)}" style="width:100%;height:calc(100vh - 60px);border:0;display:block" allow="fullscreen" allowfullscreen></iframe>`;
   document.getElementById('ov').classList.add('show');
 }
-async function commentOn(key){
-  const text=prompt('Add a comment to '+key+' (posts to Jira):'); if(text==null) return;
+async function commentOn(key,pre){
+  const text=prompt('Add a comment to '+key+' (posts to Jira):', pre||''); if(text==null) return;
   const t=text.trim(); if(!t) return;
   const pw=sessionStorage.getItem('pci_pw')||'';
   try{
