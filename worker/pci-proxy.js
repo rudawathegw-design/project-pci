@@ -285,6 +285,29 @@ export default {
       const raw = await env.BOXTOK.get(OV_KEY);
       return json(200, { overlay: raw ? JSON.parse(raw) : {} });
     }
+    if (body.action === "overlay_set_many") {
+      const cA = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
+      const ok2 = (env.COMMENT_PASSWORD && eq(cA, env.COMMENT_PASSWORD)) ||
+                  (!env.COMMENT_PASSWORD && eq(cA, env.SITE_PASSWORD));
+      if (!ok2) { await new Promise(r => setTimeout(r, 300)); return json(401, { message: "Edit password required" }); }
+      const items = Array.isArray(body.items) ? body.items.slice(0, 500) : [];
+      const raw0 = await env.BOXTOK.get(OV_KEY);
+      const ov0 = raw0 ? JSON.parse(raw0) : {};
+      let n = 0;
+      for (const it of items) {
+        const field = String(it.field || "");
+        if (!["fib_status", "link"].includes(field)) continue;
+        const sheet = String(it.sheet || "").trim();
+        const cell = String(it.cell || "").trim().toUpperCase();
+        if (!sheet || !/^[A-Z]+\d+$/.test(cell)) continue;
+        ov0[`${sheet}!${cell}`] = { sheet, cell, field,
+          value: String(it.value == null ? "" : it.value).slice(0, 500), at: new Date().toISOString() };
+        n++;
+      }
+      if (Object.keys(ov0).length > 2000) return json(400, { message: "Too many pending edits" });
+      await env.BOXTOK.put(OV_KEY, JSON.stringify(ov0));
+      return json(200, { ok: true, applied: n, count: Object.keys(ov0).length });
+    }
     if (body.action === "overlay_set" || body.action === "overlay_clear") {
       const cAuth = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
       const okC = (env.COMMENT_PASSWORD && eq(cAuth, env.COMMENT_PASSWORD)) ||

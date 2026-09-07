@@ -211,6 +211,8 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .tk-live.todo .tk-dot{background:#94a3b8}
 .wl-more{display:none}.wl tr.exp .wl-more{display:block;margin-top:9px;padding-top:9px;border-top:1px dashed #e2e8f0}
 .wl-more .m1{font-size:12.5px;color:#334155;line-height:1.5;margin-top:5px}.wl-more .m1 b{color:#0f172a}
+.wl-more .m1.mx{color:#475569;border-left:2px solid #e2e8f0;padding-left:9px;margin-top:6px;word-break:break-word}
+.wl-more .m1.mx b{color:#0f766e;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
 .wl-acts{margin-top:9px;display:flex;gap:8px;flex-wrap:wrap}
 .st-tag{font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;white-space:nowrap;display:inline-block}
 .st-tag.open{background:#fee2e2;color:#b91c1c}.st-tag.closed{background:#dcfce7;color:#166534}.st-tag.na{background:#f1f5f9;color:#64748b}
@@ -294,6 +296,7 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   <div class="sec">
     <div class="sec-h"><div class="sec-t">Findings worklist <small id="wl-count"></small></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="cbtn" id="wl-sync" onclick="syncFromJira()">⟳ Set FIB status from Jira</button>
         <button class="cbtn" id="wl-export" onclick="exportWorkbook()" style="display:none">⬇ Download updated workbook (<span id="pend-n">0</span>)</button>
         <button class="cbtn" id="wl-clear" onclick="clearPending()" style="display:none">✓ Mark as uploaded</button>
       </div></div>
@@ -477,6 +480,11 @@ function parseGaps(wb){
     const hdr=rows[hi].map(c=>norm(c).toLowerCase());
     const col=(...names)=>{ for(let j=0;j<hdr.length;j++) if(names.some(nm=>hdr[j].includes(nm))) return j; return -1; };
     const ci={section:col('section'),obs:col('observation'),rec:col('recommendation'),ev:col('evidence req','evidence'),status:col('status'),assessor:col('assessor'),client:col('client comment'),fib:col('fib status'),link:col('link')};
+    // Columns already rendered in their own place; everything else that carries
+    // text (Client Comments, Additional Comments, Evidences1/2 …) is surfaced
+    // as "extras" so sheets with two comment columns show both.
+    const srCol=hdr.findIndex(h=>/^sr\.?\s*no/i.test(h));
+    const used=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.fib,ci.link,srCol].filter(x=>x>=0));
     const colLetter=n=>{ let s=''; n=n+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
     const findings=[];
     let _k=-1;
@@ -490,10 +498,17 @@ function parseGaps(wb){
       const status=stRaw.includes('clos')?'Closed':(stRaw.includes('open')?'Open':(ci.status>=0?norm(r[ci.status]):''));
       let jira=ci.link>=0&&/atlassian/.test(norm(r[ci.link]))?norm(r[ci.link]):'';
       if(!jira) for(const c of r){ const s=norm(c); if(/atlassian\.net\/browse\//.test(s)){ jira=s; break; } }
+      const extras=[];
+      for(let j=0;j<Math.max(hdr.length,r.length);j++){
+        if(used.has(j)) continue;
+        const v=norm(r[j]); if(!v) continue;
+        const h=norm(rows[hi][j])||('Column '+colLetter(j));
+        extras.push({h,v});
+      }
       findings.push({section,observation:obs,recommendation:ci.rec>=0?norm(r[ci.rec]):'',
         evidence_required:ci.ev>=0?norm(r[ci.ev]):'',status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
         assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira,
-        _sheet:sn,_row,_cFib,_cLink});
+        extras,_sheet:sn,_row,_cFib,_cLink});
     }
     const key=norm(sn).toLowerCase();
     let area=byName[key]||areas.find(a=>key.startsWith(a.name.toLowerCase())||a.name.toLowerCase().startsWith(key));
@@ -723,6 +738,51 @@ async function clearPending(){
     toast('Pending edits cleared — now reading straight from Box.');
   }catch(e){ toast('Clear failed: '+e.message,1); }
 }
+// Map a live Jira status onto the workbook's FIB Status wording.
+// "Open" in Jira means work is under way here, so it becomes In progress.
+function fibFromJira(live){
+  if(!live) return null;
+  const done=live.category==='done';
+  if(done) return FIB_OPTS.find(o=>_norm(o)==='done')||'Done';
+  const s=_norm(live.status);
+  if(s==='open') return FIB_OPTS.find(o=>_norm(o)==='inprogress')||'In progress';
+  // any other Jira status that the workbook already uses (e.g. ON-HOLD) wins
+  const exact=FIB_OPTS.find(o=>o&&_norm(o)===s);
+  if(exact) return exact;
+  if(s.includes('hold')) return FIB_OPTS.find(o=>_norm(o).includes('hold'))||'ON-HOLD';
+  return FIB_OPTS.find(o=>_norm(o)==='inprogress')||'In progress';
+}
+async function syncFromJira(){
+  const btn=document.getElementById('wl-sync');
+  const changes=[];
+  WL_ALL.forEach(f=>{
+    if(!f._cFib) return;
+    const key=jiraKey(f.jira); if(!key) return;
+    const live=_LIVE[key]; if(!live) return;
+    const target=fibFromJira(live); if(!target) return;
+    if(_norm(target)===_norm(f.fib_status||'')) return;
+    changes.push({f,target,from:f.fib_status||'(blank)',key,jira:live.status});
+  });
+  if(!changes.length){ toast('Every linked finding already matches Jira ✓'); return; }
+  const sample=changes.slice(0,8).map(c=>`  ${c.f.area} r${c.f._row} · ${c.key} (${c.jira}) : ${c.from} → ${c.target}`).join('\n');
+  if(!confirm('Set FIB Status from Jira for '+changes.length+' finding(s)?\n\n'+sample+
+    (changes.length>8?`\n  …and ${changes.length-8} more`:'')+
+    '\n\nThese become pending edits — download the workbook afterwards to push them into Box.')) return;
+  btn.disabled=true; toast('Applying '+changes.length+' updates…');
+  try{
+    const pw=sessionStorage.getItem('pci_pw')||'';
+    const items=changes.map(c=>({sheet:c.f._sheet,cell:c.f._cFib+c.f._row,field:'fib_status',value:c.target}));
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},
+      body:JSON.stringify({action:'overlay_set_many',items})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.message||('HTTP '+r.status));
+    changes.forEach(c=>{ c.f.fib_status=c.target; c.f._pendFib=true;
+      OVERLAY[ovKey(c.f._sheet,c.f._cFib+c.f._row)]={sheet:c.f._sheet.trim(),cell:c.f._cFib+c.f._row,field:'fib_status',value:c.target}; });
+    updatePendingUI(); renderWorklist();
+    toast('Updated '+d.applied+' FIB statuses from Jira ✓ — download the workbook to push them to Box.');
+  }catch(e){ toast('Sync failed: '+e.message,1); }
+  btn.disabled=false;
+}
 function editTicket(i){
   const f=WL_ALL[i]; if(!f) return;
   const cur=f.jira||'';
@@ -803,7 +863,10 @@ function renderWorklist(){
         <div class="wl-more">
           ${f.recommendation?`<div class="m1"><b>Recommendation:</b> ${esc(f.recommendation)}</div>`:''}
           ${f.assessor_comments?`<div class="m1" style="color:#64748b"><b>Assessor:</b> ${esc(f.assessor_comments)}</div>`:''}
-          ${f.client_comments?`<div class="m1" style="color:#64748b"><b>Client/FIB:</b> ${esc(f.client_comments)}</div>`:''}
+          ${(f.extras||[]).map(x=>{
+            const link=/^https?:\/\//i.test(x.v);
+            const val=link?`<a href="${esc(x.v)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(x.v.length>70?x.v.slice(0,70)+'…':x.v)}</a>`:esc(x.v);
+            return `<div class="m1 mx"><b>${esc(x.h)}:</b> ${val}</div>`;}).join('')}
           <div class="wl-acts">${key?`<a class="cbtn" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="text-decoration:none">Open ${esc(key)} ↗</a><button class="cbtn" onclick="event.stopPropagation();commentOn('${esc(key)}')">💬 Comment</button>`:'<span style="font-size:11.5px;color:#94a3b8">No linked Jira ticket</span>'}</div>
         </div></td>
       <td class="wl-tk">${tk}</td>
