@@ -679,7 +679,7 @@ async function exportWorkbook(){
     const allXml=[];
     for(const m of wbXml.matchAll(/r:id="([^"]*)"/g)){
       const rel=new RegExp('<Relationship[^>]*Id="'+m[1]+'"[^>]*Target="([^"]*)"').exec(relsXml);
-      const p=rel?('xl/'+rel[2].replace(/^\/?xl\//,'')):null;
+      const p=rel?('xl/'+rel[1].replace(/^\/?xl\//,'')):null;
       if(p&&/worksheets\//.test(p)&&zip.file(p)) allXml.push(await zip.file(p).async('string'));
     }
     const hints={};
