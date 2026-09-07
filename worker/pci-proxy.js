@@ -26,6 +26,21 @@ function adf(text) {
   return { type: "doc", version: 1, content: String(text).split(/\n/).map(line => ({
     type: "paragraph", content: line ? [{ type: "text", text: line }] : [] })) };
 }
+// Flatten an Atlassian Document Format body back to plain text for the feed.
+function adfToText(node) {
+  if (!node) return "";
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(adfToText).join("");
+  let out = "";
+  if (node.type === "text" && node.text) out += node.text;
+  if (node.type === "mention" && node.attrs) {
+    const m = String(node.attrs.text || node.attrs.displayName || "");
+    out += m.startsWith("@") ? m : "@" + m;              // attrs.text often already has the @
+  }
+  if (node.content) out += adfToText(node.content);
+  if (node.type === "paragraph" || node.type === "heading" || node.type === "listItem") out += "\n";
+  return out;
+}
 
 export default {
   async fetch(request, env) {
@@ -104,6 +119,46 @@ export default {
         token = d.nextPageToken; if (!token || d.isLast) break;
       }
       return json(200, { project, issues, count: issues.length });
+    }
+
+    // ── Activity feed for the epic + its children: status changes, edits, comments ──
+    if (body.action === "activity") {
+      const epic = String(body.epic || env.JIRA_EPIC || "FIBXPI-49").trim();
+      // 1) collect the epic and every child key
+      const qs = new URLSearchParams({ jql: `key = "${epic}" OR parent = "${epic}"`, maxResults: "100", fields: "summary" });
+      const sr = await fetch(`${base}/rest/api/3/search/jql?${qs}`, { headers: jhdr });
+      if (!sr.ok) return json(502, { message: "Jira error", status: sr.status, detail: (await sr.text()).slice(0, 300) });
+      const sd = await sr.json();
+      const keys = (sd.issues || []).map(i => i.key);
+      // 2) pull changelog + comments per issue (small set: epic + ~9 children)
+      const items = [];
+      await Promise.all(keys.map(async (key) => {
+        const r = await fetch(`${base}/rest/api/3/issue/${key}?expand=changelog&fields=summary,comment`, { headers: jhdr });
+        if (!r.ok) return;
+        const d = await r.json();
+        const summary = (d.fields && d.fields.summary) || "";
+        for (const h of ((d.changelog && d.changelog.histories) || [])) {
+          for (const it of (h.items || [])) {
+            const field = it.field || "";
+            if (field === "Comment") continue;               // comments come through below
+            items.push({
+              ts: h.created, key, summary,
+              who: (h.author && h.author.displayName) || "",
+              kind: field.toLowerCase() === "status" ? "status" : "edit",
+              field, from: it.fromString || "", to: it.toString || "",
+            });
+          }
+        }
+        for (const c of (((d.fields || {}).comment || {}).comments || [])) {
+          items.push({
+            ts: c.created, key, summary,
+            who: (c.author && c.author.displayName) || "",
+            kind: "comment", text: adfToText(c.body).replace(/\n{2,}/g, "\n").trim().slice(0, 1200),
+          });
+        }
+      }));
+      items.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      return json(200, { epic, count: items.length, items: items.slice(0, Number(body.limit) || 120) });
     }
 
     // ── Post a comment to a FIBXPI issue ──

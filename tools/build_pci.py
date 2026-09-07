@@ -222,6 +222,25 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .jr-sum{flex:1;font-size:12.5px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jr-st{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .jr-st.done{background:#dcfce7;color:#166534}.jr-st.prog{background:#fef3c7;color:#92400e}.jr-st.over{background:#fee2e2;color:#b91c1c}
+/* activity feed */
+.act-filters{display:flex;gap:6px;flex-wrap:wrap}
+.afb{border:1px solid var(--line);background:#fff;color:#475569;border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700;cursor:pointer}
+.afb:hover{border-color:var(--teal)}
+.afb.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.act{display:flex;flex-direction:column}
+.arow{display:grid;grid-template-columns:26px 1fr;gap:11px;padding:11px 2px;border-bottom:1px solid #f1f5f9}
+.arow:last-child{border-bottom:none}
+.aic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;margin-top:1px}
+.aic.comment{background:#dbeafe;color:#1e40af}.aic.status{background:#dcfce7;color:#166534}.aic.edit{background:#f1f5f9;color:#64748b}
+.ahead{font-size:12.5px;color:#334155;line-height:1.45}
+.ahead b{color:#0f172a;font-weight:800}
+.akey{font-family:ui-monospace,monospace;font-size:11px;font-weight:800;text-decoration:none;background:#eef2ff;color:#3730a3;padding:2px 7px;border-radius:6px}
+.awhen{font-size:11px;color:var(--slate);font-weight:600;white-space:nowrap}
+.atxt{margin-top:6px;font-size:12.5px;color:#475569;line-height:1.5;background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:0 8px 8px 0;padding:8px 11px;white-space:pre-wrap;word-break:break-word}
+.achg{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
+.achip{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#475569}
+.achip.to{background:#dcfce7;color:#166534}
+.asum{color:var(--slate);font-size:11.5px}
 </style></head>
 <body>
 <div id="gate"><div class="gate-card">
@@ -273,6 +292,18 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   <!-- Jira team-evidence tickets (compact side reference) -->
   <div class="sec" id="jira-sec" style="display:none"><div class="sec-h"><div class="sec-t">Team evidence tickets <small id="jira-sub">Jira epic FIBXPI-49</small></div></div>
     <div class="jref" id="jref"></div></div>
+  <!-- latest activity on the epic -->
+  <div class="sec" id="act-sec" style="display:none">
+    <div class="sec-h"><div class="sec-t">Latest activity <small id="act-sub">FIBXPI-49 · status changes, edits &amp; comments</small></div>
+      <div class="act-filters">
+        <button class="afb on" onclick="actFilter(this,'')">All</button>
+        <button class="afb" onclick="actFilter(this,'comment')">💬 Comments</button>
+        <button class="afb" onclick="actFilter(this,'status')">✓ Status</button>
+        <button class="afb" onclick="actFilter(this,'edit')">✎ Edits</button>
+      </div></div>
+    <div class="act" id="act-list"></div>
+    <div style="text-align:center;margin-top:14px"><button class="cbtn" id="act-more" onclick="actMore()" style="display:none">Show more</button></div>
+  </div>
   <div class="sec"><div class="sec-h"><div class="sec-t">Documents &amp; evidence <small>opens full-screen from Box</small></div></div>
     <div class="ev-row" id="ev-row"></div>
   </div>
@@ -330,8 +361,64 @@ function render(){
   document.getElementById('gen2').textContent=PCI.generated||'';
   document.getElementById('app').style.display='block';
   document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>`<div class="ev-btn" onclick="openEvidence('${e.k}')"><div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
-  loadGaps();   // live gap workbook from Box → remediation bar + area cards
-  loadEpic();   // live Jira epic FIBXPI-49 → timeline + overdue + owners
+  loadGaps();     // live gap workbook from Box → remediation strip + worklist
+  loadEpic();     // live Jira epic FIBXPI-49 → team evidence tickets
+  loadActivity(); // live epic activity → status changes, edits, comments
+}
+
+// ── Latest activity on FIBXPI-49 (+children): status, edits, comments ──
+let ACT=[], ACT_K='', ACT_N=25;
+function ago(ts){
+  const s=Math.max(0,(Date.now()-new Date(ts).getTime())/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  const d=Math.floor(s/86400);
+  if(d<30) return d+'d ago';
+  return new Date(ts).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'2-digit'});
+}
+async function loadActivity(){
+  if(!GH_PROXY) return;
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'activity'})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json(); ACT=d.items||[];
+    document.getElementById('act-sec').style.display='';
+    renderActivity();
+  }catch(e){}
+}
+function actFilter(btn,k){
+  document.querySelectorAll('.afb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on'); ACT_K=k; ACT_N=25; renderActivity();
+}
+function actMore(){ ACT_N+=25; renderActivity(); }
+function renderActivity(){
+  const rows=ACT.filter(a=>!ACT_K||a.kind===ACT_K);
+  const nC=ACT.filter(a=>a.kind==='comment').length, nS=ACT.filter(a=>a.kind==='status').length, nE=ACT.filter(a=>a.kind==='edit').length;
+  document.getElementById('act-sub').textContent='FIBXPI-49 · '+nC+' comments · '+nS+' status changes · '+nE+' edits';
+  const show=rows.slice(0,ACT_N);
+  document.getElementById('act-list').innerHTML=show.map(a=>{
+    const ic=a.kind==='comment'?'💬':(a.kind==='status'?'✓':'✎');
+    const keyLink=`<a class="akey" href="https://fibtask.atlassian.net/browse/${esc(a.key)}" target="_blank" rel="noopener">${esc(a.key)}</a>`;
+    let head='';
+    if(a.kind==='comment') head=`<b>${esc(a.who||'—')}</b> commented on ${keyLink}`;
+    else if(a.kind==='status') head=`<b>${esc(a.who||'—')}</b> changed status on ${keyLink}`;
+    else head=`<b>${esc(a.who||'—')}</b> edited <b>${esc(a.field||'field')}</b> on ${keyLink}`;
+    let detail='';
+    if(a.kind==='comment') detail=`<div class="atxt">${esc(a.text||'')}</div>`;
+    else{
+      const from=(a.from||'').slice(0,60), to=(a.to||'').slice(0,60);
+      if(from||to) detail=`<div class="achg">${from?`<span class="achip">${esc(from)}</span> →`:''}<span class="achip to">${esc(to||'—')}</span></div>`;
+    }
+    return `<div class="arow"><div class="aic ${a.kind}">${ic}</div>
+      <div><div class="ahead">${head} <span class="awhen">· ${esc(ago(a.ts))}</span>
+        <button class="cbtn" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="commentOn('${esc(a.key)}')">💬 Reply</button></div>
+        <div class="asum">${esc(a.summary||'')}</div>${detail}</div></div>`;
+  }).join('')||'<div style="color:#94a3b8;font-size:13px;padding:10px 2px">No activity of this type.</div>';
+  const more=document.getElementById('act-more');
+  more.style.display=rows.length>ACT_N?'':'none';
+  more.textContent='Show more ('+(rows.length-ACT_N)+' left)';
 }
 
 // ── Parse the Box gap workbook (SheetJS) into {summary, areas[]} ──
