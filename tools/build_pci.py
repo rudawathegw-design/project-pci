@@ -181,6 +181,43 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .own-meta b.over{color:var(--red)}
 /* task modal */
 .tm-row{font-size:13.5px;color:#334155;margin-top:8px;line-height:1.5}.tm-row b{color:#0f172a}
+/* remediation strip */
+.strip{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:18px;flex-wrap:wrap}
+.strip-pct{display:flex;flex-direction:column;line-height:1}.strip-pct span{font-size:30px;font-weight:900;letter-spacing:-.02em;color:var(--teal-d)}
+.strip-pct small{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin-top:4px}
+.strip-bar{flex:1 1 200px;height:12px;border-radius:999px;background:#eef2f6;overflow:hidden;min-width:160px}
+.strip-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#0f9389,#10b981);width:0;transition:width .6s}
+.strip-nums{display:flex;gap:16px;flex-wrap:wrap}.sn{font-size:12.5px;color:var(--sub);font-weight:600}.sn b{font-weight:900;color:#0f172a}
+/* filters */
+.filters{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.f-search{flex:1 1 240px;min-width:180px;border:1.5px solid var(--line);border-radius:10px;padding:9px 13px;font-size:13.5px;outline:none}
+.f-search:focus{border-color:var(--teal)}
+.f-sel{border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;background:#fff;outline:none;cursor:pointer}
+/* worklist table */
+.wl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
+.wl th{text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--line);position:sticky;top:0}
+.wl td{padding:12px 14px;border-bottom:1px solid #eef2f6;vertical-align:top}
+.wl tr:last-child td{border-bottom:none}
+.wl tr.f-open{cursor:pointer}.wl tr.f-open:hover td{background:#f8fbfd}
+.wl-area{font-weight:700;color:#334155;font-size:12.5px}
+.wl-obs{color:#0f172a;line-height:1.45}.wl-ev{color:var(--sub);font-size:12px;margin-top:4px}
+.wl-ev b{color:#475569;font-weight:700}
+.wl-tk a{font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;text-decoration:none;background:#eef2ff;color:#3730a3;padding:3px 8px;border-radius:7px;white-space:nowrap}
+.wl-tk .none{color:#cbd5e1;font-size:11px}
+.wl-more{display:none}.wl tr.exp .wl-more{display:block;margin-top:9px;padding-top:9px;border-top:1px dashed #e2e8f0}
+.wl-more .m1{font-size:12.5px;color:#334155;line-height:1.5;margin-top:5px}.wl-more .m1 b{color:#0f172a}
+.wl-acts{margin-top:9px;display:flex;gap:8px;flex-wrap:wrap}
+.st-tag{font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:999px;white-space:nowrap;display:inline-block}
+.st-tag.open{background:#fee2e2;color:#b91c1c}.st-tag.closed{background:#dcfce7;color:#166534}.st-tag.na{background:#f1f5f9;color:#64748b}
+.fib-tag{font-size:11px;font-weight:700;color:#475569}
+/* jira reference */
+.jref{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.jr{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 13px}
+.jr-key{font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;color:var(--teal-d);text-decoration:none;white-space:nowrap}
+.jr-sum{flex:1;font-size:12.5px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jr-st{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.jr-st.done{background:#dcfce7;color:#166534}.jr-st.prog{background:#fef3c7;color:#92400e}.jr-st.over{background:#fee2e2;color:#b91c1c}
 </style></head>
 <body>
 <div id="gate"><div class="gate-card">
@@ -204,19 +241,34 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
       <div><div class="brand-t">PCI DSS Compliance Cockpit</div><div class="brand-s" id="proj"></div></div></div>
     <div class="gen" id="gen"></div>
   </div>
-  <div class="hero">
-    <div class="hcard dark"><div class="hflex">
-      <div><div class="hlbl">Gap remediation</div><div class="hbig" id="gap-pct">0%</div><div class="hsub" id="gap-sub">—</div></div>
-      <div class="ring" id="gap-ring"><i id="gap-ring-n">0%</i></div></div></div>
-    <div class="hcard"><div class="hlbl">Open findings</div><div class="hbig" id="find-open" style="color:var(--red)">—</div><div class="hsub" id="find-sub">—</div></div>
-    <div class="hcard"><div class="hlbl">Assessment tasks</div><div class="hbig" id="task-big" style="font-size:36px;margin-top:8px">—</div><div class="hsub" id="task-sub">—</div></div>
+  <!-- compact remediation strip -->
+  <div class="strip">
+    <div class="strip-pct"><span id="gap-pct">0%</span><small>remediated</small></div>
+    <div class="strip-bar"><i id="gap-barfill"></i></div>
+    <div class="strip-nums">
+      <span class="sn"><b id="sn-closed">0</b> closed</span>
+      <span class="sn"><b id="sn-open" style="color:var(--red)">0</b> open</span>
+      <span class="sn"><b id="sn-total">0</b> findings</span>
+      <span class="sn" id="gap-src">—</span>
+    </div>
   </div>
-  <div class="sec"><div class="sec-h"><div class="sec-t">Assessment timeline <small id="tl-sub">start → certification</small></div>
-    <div class="legend"><span><i style="background:var(--green)"></i>Done</span><span><i style="background:var(--teal)"></i>In&nbsp;progress</span><span><i style="background:var(--red)"></i>Overdue</span></div></div>
-    <div class="tl" id="timeline"><div style="color:#94a3b8;font-size:13px;padding:8px">Loading live from Jira…</div></div></div>
-  <div class="sec" id="live-sec" style="display:none"><div class="sec-h"><div class="sec-t">Overdue &amp; at-risk <small id="live-sub">live from Jira</small></div></div><div id="live-list"></div></div>
-  <div class="sec"><div class="sec-h"><div class="sec-t">Gap remediation by area <small id="gap-count"></small></div><span class="hsub" id="gap-src" style="margin:0"></span></div><div class="gaps" id="gaps"><div style="color:#94a3b8;font-size:13px;padding:8px">Loading live from Box…</div></div></div>
-  <div class="sec" id="own-sec" style="display:none"><div class="sec-h"><div class="sec-t">Owners <small>assessment task load</small></div></div><div id="owners"></div></div>
+  <!-- findings worklist -->
+  <div class="sec">
+    <div class="sec-h"><div class="sec-t">Findings worklist <small id="wl-count"></small></div></div>
+    <div class="filters">
+      <input id="f-search" class="f-search" placeholder="Search findings, evidence, ticket…" oninput="renderWorklist()">
+      <select id="f-status" class="f-sel" onchange="renderWorklist()">
+        <option value="">All statuses</option><option value="Open">Open only</option><option value="Closed">Closed only</option></select>
+      <select id="f-area" class="f-sel" onchange="renderWorklist()"><option value="">All areas</option></select>
+    </div>
+    <div class="wl-wrap"><table class="wl" id="wl"><thead><tr>
+      <th style="width:150px">Area</th><th>Finding &amp; evidence required</th>
+      <th style="width:112px">Ticket</th><th style="width:96px">Assessor</th><th style="width:118px">FIB status</th>
+    </tr></thead><tbody id="wl-body"><tr><td colspan="5" style="color:#94a3b8;padding:16px">Loading live from Box…</td></tr></tbody></table></div>
+  </div>
+  <!-- Jira team-evidence tickets (compact side reference) -->
+  <div class="sec" id="jira-sec" style="display:none"><div class="sec-h"><div class="sec-t">Team evidence tickets <small id="jira-sub">Jira epic FIBXPI-49</small></div></div>
+    <div class="jref" id="jref"></div></div>
   <div class="sec"><div class="sec-h"><div class="sec-t">Documents &amp; evidence <small>opens full-screen from Box</small></div></div>
     <div class="ev-row" id="ev-row"></div>
   </div>
@@ -333,27 +385,60 @@ async function loadGaps(){
   }catch(e){ GAPS=(PCI&&PCI.gaps)||{summary:{},areas:[]}; src.textContent='baseline snapshot (Box unavailable)'; }
   renderGaps();
 }
+let WL_ALL=[];
 function renderGaps(){
   const gs=GAPS.summary||{}, areas=GAPS.areas||[];
+  // strip
   document.getElementById('gap-pct').textContent=(gs.pct||0)+'%';
-  document.getElementById('gap-ring').style.setProperty('--p',gs.pct||0);
-  document.getElementById('gap-ring-n').textContent=(gs.pct||0)+'%';
-  document.getElementById('gap-sub').textContent=(gs.closed||0)+' of '+(gs.total||0)+' findings closed';
-  document.getElementById('find-open').textContent=(gs.open||0);
-  document.getElementById('find-sub').textContent=(gs.open||0)+' open · '+(gs.closed||0)+' closed of '+(gs.total||0)+' findings';
-  document.getElementById('gap-count').textContent=areas.length+' areas · '+(gs.total||0)+' findings';
-  document.getElementById('gaps').innerHTML=areas.slice().sort((a,b)=>b.pct-a.pct).map(a=>{
-    const col=statusColor(a.pct), idx=areas.indexOf(a);
-    return `<div class="gcard" onclick="openArea(${idx})"><div class="gc-top"><div class="gc-name">${esc(a.name)}</div>
-      <div class="gc-pct" style="color:${col}">${a.pct}%</div></div>
-      <div class="gc-bar"><i style="width:${a.pct}%;background:${col}"></i></div>
-      <div class="gc-meta"><span class="pill"><span class="dot-o"></span> <b>${a.open}</b> open</span>
-      <span class="pill"><span class="dot-c"></span> <b>${a.closed}</b> closed</span>
-      <span style="margin-left:auto">${a.total} total</span></div></div>`;
-  }).join('')||'<div style="color:#94a3b8;font-size:13px;padding:8px">No areas found.</div>';
+  document.getElementById('gap-barfill').style.width=(gs.pct||0)+'%';
+  document.getElementById('sn-closed').textContent=(gs.closed||0);
+  document.getElementById('sn-open').textContent=(gs.open||0);
+  document.getElementById('sn-total').textContent=(gs.total||0);
+  // flatten findings into one worklist
+  WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
+  // area filter options
+  const sel=document.getElementById('f-area');
+  sel.innerHTML='<option value="">All areas ('+WL_ALL.length+')</option>'+
+    areas.map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${a.total})</option>`).join('');
+  renderWorklist();
+}
+function renderWorklist(){
+  const q=(document.getElementById('f-search').value||'').toLowerCase().trim();
+  const fst=document.getElementById('f-status').value;
+  const far=document.getElementById('f-area').value;
+  let rows=WL_ALL.filter(f=>{
+    if(far && f.area!==far) return false;
+    if(fst && f.status!==fst) return false;
+    if(q){ const hay=(f.area+' '+f.section+' '+f.observation+' '+f.evidence_required+' '+f.recommendation+' '+f.jira+' '+f.fib_status).toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  });
+  document.getElementById('wl-count').textContent=rows.length+' of '+WL_ALL.length+' findings';
+  const body=document.getElementById('wl-body');
+  if(!rows.length){ body.innerHTML='<tr><td colspan="5" style="color:#94a3b8;padding:16px">No findings match.</td></tr>'; return; }
+  body.innerHTML=rows.map(f=>{
+    const st=(f.status||'').toLowerCase();
+    const stTag=st==='closed'?'<span class="st-tag closed">Closed</span>':(st==='open'?'<span class="st-tag open">Open</span>':`<span class="st-tag na">${esc(f.status||'—')}</span>`);
+    const key=jiraKey(f.jira);
+    const live=key&&_LIVE[key]?_LIVE[key]:null;
+    const tk=key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>${live?'<div style="font-size:10px;color:#64748b;margin-top:3px">'+esc(live.status)+'</div>':''}`:'<span class="none">no ticket</span>';
+    const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
+    return `<tr class="f-open" onclick="this.classList.toggle('exp')">
+      <td><div class="wl-area">${esc(f.area)}</div></td>
+      <td><div class="wl-obs">${sec}${esc(f.observation||'—')}</div>
+        ${f.evidence_required?`<div class="wl-ev"><b>Evidence:</b> ${esc(f.evidence_required)}</div>`:''}
+        <div class="wl-more">
+          ${f.recommendation?`<div class="m1"><b>Recommendation:</b> ${esc(f.recommendation)}</div>`:''}
+          ${f.assessor_comments?`<div class="m1" style="color:#64748b"><b>Assessor:</b> ${esc(f.assessor_comments)}</div>`:''}
+          ${f.client_comments?`<div class="m1" style="color:#64748b"><b>Client/FIB:</b> ${esc(f.client_comments)}</div>`:''}
+          <div class="wl-acts">${key?`<a class="cbtn" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="text-decoration:none">Open ${esc(key)} ↗</a><button class="cbtn" onclick="event.stopPropagation();commentOn('${esc(key)}')">💬 Comment</button>`:'<span style="font-size:11.5px;color:#94a3b8">No linked Jira ticket</span>'}</div>
+        </div></td>
+      <td class="wl-tk">${tk}</td>
+      <td>${stTag}</td>
+      <td><span class="fib-tag">${esc(f.fib_status||'—')}</span></td></tr>`;
+  }).join('');
 }
 
-// ── Live Jira epic FIBXPI-49 → timeline, overdue, owners, tasks card ──
+// ── Live Jira epic FIBXPI-49 → compact team-evidence ticket reference ──
 let _LIVE={};
 async function loadEpic(){
   if(!GH_PROXY) return;
@@ -364,44 +449,18 @@ async function loadEpic(){
     const d=await r.json(); EPIC=d.issues||[]; _LIVE={}; EPIC.forEach(i=>_LIVE[i.key]=i);
     const cls=i=>i.category==='done'?'done':((i.due&&i.due<TODAY)?'over':'prog');
     const done=EPIC.filter(i=>i.category==='done').length;
-    const overdue=EPIC.filter(i=>i.due&&i.category!=='done'&&i.due<TODAY).sort((a,b)=>a.due<b.due?-1:1);
-    // hero card
-    document.getElementById('task-big').textContent=done+' / '+EPIC.length;
-    document.getElementById('task-sub').innerHTML=(EPIC.length-done)+' remaining · '+
-      (overdue.length?'<b style="color:var(--red)">'+overdue.length+' overdue</b>':'none overdue');
-    // timeline (sorted by due asc, already from worker)
-    document.getElementById('tl-sub').textContent='start → certification · live from Jira · '+EPIC.length+' tasks';
-    document.getElementById('timeline').innerHTML=EPIC.map(i=>{
-      const c=cls(i), mark=c==='done'?'✓':(c==='over'?'!':'●');
-      const due=i.due?new Date(i.due).toLocaleDateString(undefined,{month:'short',year:'2-digit'}):'—';
-      const late=(c==='over')?' · '+daysLate(i.due)+'d late':'';
-      return `<div class="tl-node ${c}" onclick="openTask('${esc(i.key)}')" title="${esc(i.summary)}">
-        <div class="tl-dot">${mark}</div><div class="tl-key">${esc(i.key)}</div>
-        <div class="tl-name">${esc(i.summary)}</div><div class="tl-due">${esc(due)}${late}</div></div>`;
-    }).join('')||'<div style="color:#94a3b8;padding:8px">No tasks in this epic.</div>';
-    // overdue list
-    const sec=document.getElementById('live-sec'), list=document.getElementById('live-list');
-    document.getElementById('live-sub').textContent='live from Jira · epic '+esc(EPIC[0]?'FIBXPI-49':'')+' · '+overdue.length+' overdue';
-    list.innerHTML=overdue.length?('<div class="live-grid">'+overdue.map(i=>`
-      <div class="live-row">
-        <span class="lr-key">${esc(i.key)}</span>
-        <span class="lr-sum">${esc(i.summary)}</span>
-        <span class="lr-st">${esc(i.assignee||'—')}</span>
-        <span class="lr-days">${daysLate(i.due)}d</span>
-        <button class="cbtn" style="padding:4px 9px" onclick="commentOn('${esc(i.key)}')">💬</button></div>`).join('')+'</div>')
-      :'<div style="color:#64748b;font-size:13px;padding:6px 2px">Nothing overdue in this epic. 🎉</div>';
-    sec.style.display='';
-    // owners
-    const own={}; EPIC.forEach(i=>{ const o=i.assignee||'Unassigned'; (own[o]=own[o]||{d:0,t:0,o:0}); own[o].t++; if(i.category==='done')own[o].d++; if(i.due&&i.category!=='done'&&i.due<TODAY)own[o].o++; });
-    const rows=Object.entries(own).sort((a,b)=>b[1].t-a[1].t);
-    document.getElementById('owners').innerHTML=rows.map(([n,s])=>{
-      const pct=s.t?Math.round(100*s.d/s.t):0;
-      return `<div class="own-row"><div class="own-name">${esc(n)}</div>
-        <div class="own-bar"><i style="width:${pct}%"></i></div>
-        <div class="own-meta">${s.d}/${s.t} done${s.o?' · <b class="over">'+s.o+' late</b>':''}</div></div>`;
-    }).join('');
-    document.getElementById('own-sec').style.display='';
-  }catch(e){ document.getElementById('timeline').innerHTML='<div style="color:#94a3b8;padding:8px">Live Jira unavailable.</div>'; }
+    const over=EPIC.filter(i=>i.due&&i.category!=='done'&&i.due<TODAY).length;
+    document.getElementById('jira-sub').innerHTML='Jira epic FIBXPI-49 · '+done+'/'+EPIC.length+' done'+(over?' · <b style="color:var(--red)">'+over+' overdue</b>':'');
+    document.getElementById('jref').innerHTML=EPIC.map(i=>{
+      const c=cls(i), lbl=c==='done'?'Done':(c==='over'?daysLate(i.due)+'d late':'In progress');
+      return `<div class="jr"><a class="jr-key" href="https://fibtask.atlassian.net/browse/${esc(i.key)}" target="_blank" rel="noopener">${esc(i.key)}</a>
+        <span class="jr-sum" title="${esc(i.summary)}">${esc(i.summary)}</span>
+        <span class="jr-st ${c}">${esc(lbl)}</span>
+        <button class="cbtn" style="padding:3px 8px" onclick="commentOn('${esc(i.key)}')">💬</button></div>`;
+    }).join('')||'<div style="color:#94a3b8;padding:6px">No tickets.</div>';
+    document.getElementById('jira-sec').style.display='';
+    if(WL_ALL.length) renderWorklist(); // refresh so live Jira statuses show on rows
+  }catch(e){ document.getElementById('jira-sub').textContent='Live Jira unavailable'; }
 }
 function openTask(key){
   const i=_LIVE[key]; if(!i) return;
