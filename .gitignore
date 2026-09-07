@@ -1,0 +1,11 @@
+node_modules/
+worker/node_modules/
+.wrangler/
+worker/.wrangler/
+*.pyc
+__pycache__/
+# Source spreadsheets stay local — never publish raw PCI data
+data/*.xlsx
+
+# Plaintext PCI findings — NEVER publish (only the encrypted docs/index.html goes public)
+data/pci_data.json

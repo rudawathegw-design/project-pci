@@ -1,0 +1,8 @@
+name = "pci-gateway"
+main = "pci-gateway.js"
+compatibility_date = "2024-11-01"
+
+routes = [
+  { pattern = "fibpmo.com/pci", zone_name = "fibpmo.com" },
+  { pattern = "fibpmo.com/pci/*", zone_name = "fibpmo.com" },
+]
