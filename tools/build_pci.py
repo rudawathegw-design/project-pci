@@ -480,10 +480,29 @@ function parseGaps(wb){
     const hdr=rows[hi].map(c=>norm(c).toLowerCase());
     const col=(...names)=>{ for(let j=0;j<hdr.length;j++) if(names.some(nm=>hdr[j].includes(nm))) return j; return -1; };
     const ci={section:col('section'),obs:col('observation'),rec:col('recommendation'),ev:col('evidence req','evidence'),status:col('status'),assessor:col('assessor'),client:col('client comment'),fib:col('fib status'),link:col('link')};
+    const srCol=hdr.findIndex(h=>/^sr\.?\s*no/i.test(h));
+    // Some sheets leave the FIB Status / Link headers blank (HR, SIEM). Infer
+    // those columns from the data so they stay editable instead of turning up
+    // as an unnamed "Column I".
+    const dataRows=rows.slice(hi+1);
+    if(ci.fib<0||ci.link<0){
+      const taken=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.client,srCol].filter(x=>x>=0));
+      const nk=s=>String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,'');
+      const STAT=new Set(['done','inprogress','onhold','notstarted','completed','pending','na']);
+      const width=Math.max(hdr.length,...dataRows.map(r=>r.length),0);
+      const st={},lk={};
+      for(const r of dataRows) for(let j=0;j<width;j++){
+        const v=norm(r[j]); if(!v||taken.has(j)) continue;
+        if(/atlassian\.net\/browse\//i.test(v)) lk[j]=(lk[j]||0)+1;
+        else if(STAT.has(nk(v))) st[j]=(st[j]||0)+1;
+      }
+      const best=m=>{ let b=-1,n=0; for(const j in m){ if(m[j]>n){n=m[j];b=+j;} } return n>=2?b:-1; };
+      if(ci.fib<0){ const j=best(st); if(j>=0) ci.fib=j; }
+      if(ci.link<0){ const j=best(lk); if(j>=0) ci.link=j; }
+    }
     // Columns already rendered in their own place; everything else that carries
     // text (Client Comments, Additional Comments, Evidences1/2 …) is surfaced
     // as "extras" so sheets with two comment columns show both.
-    const srCol=hdr.findIndex(h=>/^sr\.?\s*no/i.test(h));
     const used=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.fib,ci.link,srCol].filter(x=>x>=0));
     const colLetter=n=>{ let s=''; n=n+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
     const findings=[];
