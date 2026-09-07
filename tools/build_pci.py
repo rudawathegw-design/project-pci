@@ -217,6 +217,8 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .fib-tag{font-size:11px;font-weight:700;color:#475569}
 .fibsel{border:1px solid var(--line);border-radius:8px;padding:4px 6px;font-size:11.5px;font-weight:700;color:#334155;background:#fff;cursor:pointer;max-width:112px}
 .fibsel:hover{border-color:var(--teal)}.fibsel:disabled{opacity:.5;cursor:wait}
+.fibsel.pend{border-color:var(--amber);background:#fffbeb}
+.pendtag{font-size:9.5px;font-weight:800;color:var(--amber);margin-top:3px;letter-spacing:.02em}
 .pen{border:1px solid var(--line);background:#fff;color:#64748b;border-radius:6px;padding:1px 6px;font-size:11px;cursor:pointer;margin-left:5px}
 .pen:hover{border-color:var(--teal);color:var(--teal-d)}
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:#0b1f3a;color:#fff;
@@ -286,7 +288,11 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   </div>
   <!-- findings worklist -->
   <div class="sec">
-    <div class="sec-h"><div class="sec-t">Findings worklist <small id="wl-count"></small></div></div>
+    <div class="sec-h"><div class="sec-t">Findings worklist <small id="wl-count"></small></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="cbtn" id="wl-export" onclick="exportWorkbook()" style="display:none">⬇ Download updated workbook (<span id="pend-n">0</span>)</button>
+        <button class="cbtn" id="wl-clear" onclick="clearPending()" style="display:none">✓ Mark as uploaded</button>
+      </div></div>
     <div class="filters">
       <input id="f-search" class="f-search" placeholder="Search findings, evidence, ticket…" oninput="renderWorklist()">
       <select id="f-status" class="f-sel" onchange="renderWorklist()">
@@ -324,6 +330,7 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
   <div class="m-body" id="ov-body"></div>
 </div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 const ENC = /*__ENC__*/{};
 const EVIDENCE = /*__EVIDENCE__*/{};
@@ -500,6 +507,7 @@ async function loadGaps(){
     GAPS=parseGaps(XLSX.read(await r.arrayBuffer(),{type:'array'}));
     src.textContent='● live from Box'; src.style.color='var(--teal-d)';
   }catch(e){ GAPS=(PCI&&PCI.gaps)||{summary:{},areas:[]}; src.textContent='baseline snapshot (Box unavailable)'; }
+  await loadOverlay();
   renderGaps();
   loadFindingStatuses();
 }
@@ -516,7 +524,7 @@ async function loadFindingStatuses(){
     renderWorklist();
   }catch(e){}
 }
-let WL_ALL=[], FIB_OPTS=[''];
+let WL_ALL=[], FIB_OPTS=[''], OVERLAY={};
 // ── Write an edit back into the Box workbook (FIB Status / Link only) ──
 function toast(msg,bad){
   let t=document.getElementById('toast');
@@ -524,28 +532,109 @@ function toast(msg,bad){
   t.textContent=msg; t.className='show'+(bad?' bad':'');
   clearTimeout(window._tt); window._tt=setTimeout(()=>{t.className='';},bad?6000:2600);
 }
+async function loadOverlay(){
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'overlay_get'})});
+    if(r.ok){ const d=await r.json(); OVERLAY=d.overlay||{}; }
+  }catch(e){}
+}
+function pendingCount(){ return Object.keys(OVERLAY).length; }
+function updatePendingUI(){
+  const n=pendingCount();
+  document.getElementById('pend-n').textContent=n;
+  document.getElementById('wl-export').style.display=n?'':'none';
+  document.getElementById('wl-clear').style.display=n?'':'none';
+}
 async function saveCell(i,field,value,el){
   const f=WL_ALL[i]; if(!f) return;
   const col=field==='fib_status'?f._cFib:f._cLink;
   if(!col){ toast('That column does not exist in this sheet.',1); return; }
   const prev=f[field]||'';
   const pw=sessionStorage.getItem('pci_pw')||'';
-  if(el) el.disabled=true; toast('Saving to Box…');
+  if(el) el.disabled=true; toast('Saving…');
   try{
     const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},
-      body:JSON.stringify({action:'gap_edit',sheet:f._sheet,cell:col+f._row,value,field})});
+      body:JSON.stringify({action:'overlay_set',sheet:f._sheet,cell:col+f._row,value,field})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){
       if(el){ el.disabled=false; if(el.tagName==='SELECT') el.value=prev; }
-      toast(d.needsAuth?'Box is not connected yet — authorize it first.':('Save failed: '+(d.message||('HTTP '+r.status))),1);
-      return;
+      toast('Save failed: '+(d.message||('HTTP '+r.status)),1); return;
     }
-    f[field]=value;
-    if(field==='link'){ f.jira=value; }
+    OVERLAY[f._sheet+'!'+col+f._row]={sheet:f._sheet,cell:col+f._row,field,value};
+    f[field]=value; if(field==='link') f.jira=value;
     if(el) el.disabled=false;
-    toast('Saved to the Box workbook ✓');
-    if(field==='link') renderWorklist();
+    updatePendingUI(); renderWorklist();
+    toast('Saved ✓ — everyone sees it now. Download the workbook to push it into Box.');
   }catch(e){ if(el) el.disabled=false; toast('Save failed: '+e.message,1); }
+}
+// ── Apply pending edits to the real .xlsx and hand it back for upload to Box ──
+function _xmlEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _colNum(ref){ let n=0; for(const ch of /^[A-Z]+/.exec(ref)[0]) n=n*26+(ch.charCodeAt(0)-64); return n; }
+function _patchCell(xml,cellRef,value){
+  const rowNo=/^[A-Z]+(\d+)$/.exec(cellRef)[1];
+  const rm=new RegExp('<row [^>]*r="'+rowNo+'"[^>]*>[\\s\\S]*?</row>').exec(xml);
+  if(!rm) throw new Error('row '+rowNo+' not found');
+  const rowXml=rm[0];
+  const cm=new RegExp('<c [^>]*r="'+cellRef+'"[^>]*(?:/>|>[\\s\\S]*?</c>)').exec(rowXml);
+  const inline=st=>'<c r="'+cellRef+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+_xmlEsc(value)+'</t></is></c>';
+  let newRow;
+  if(cm){ const sm=/\ss="(\d+)"/.exec(cm[0]); newRow=rowXml.replace(cm[0],inline(sm?' s="'+sm[1]+'"':'')); }
+  else{
+    const target=_colNum(cellRef); let at=null;
+    for(const c of rowXml.matchAll(/<c [^>]*r="([A-Z]+)\d+"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)){ if(_colNum(c[1]+'1')>target){ at=c.index; break; } }
+    if(at===null) at=rowXml.lastIndexOf('</row>');
+    newRow=rowXml.slice(0,at)+inline('')+rowXml.slice(at);
+  }
+  return xml.replace(rowXml,newRow);
+}
+async function exportWorkbook(){
+  const btn=document.getElementById('wl-export'); btn.disabled=true;
+  toast('Building updated workbook…');
+  try{
+    const pw=sessionStorage.getItem('pci_pw')||'';
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'gaps'})});
+    if(!r.ok) throw new Error('could not fetch the workbook');
+    const zip=await JSZip.loadAsync(await r.arrayBuffer());
+    const wbXml=await zip.file('xl/workbook.xml').async('string');
+    const relsXml=await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const pathFor=name=>{
+      const want=name.trim().toLowerCase();
+      for(const m of wbXml.matchAll(/<sheet[^>]*name="([^"]*)"[^>]*r:id="([^"]*)"[^>]*\/>/g)){
+        const nm=m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+        if(nm.trim().toLowerCase()!==want) continue;
+        const rel=new RegExp('<Relationship[^>]*Id="'+m[2]+'"[^>]*Target="([^"]*)"').exec(relsXml);
+        return rel?('xl/'+rel[1].replace(/^\/?xl\//,'')):null;
+      }
+      return null;
+    };
+    const byPath={};
+    for(const k of Object.keys(OVERLAY)){
+      const e=OVERLAY[k], p=pathFor(e.sheet);
+      if(!p||!zip.file(p)) continue;
+      if(!byPath[p]) byPath[p]=await zip.file(p).async('string');
+      byPath[p]=_patchCell(byPath[p],e.cell,e.value);
+    }
+    let n=0;
+    for(const p of Object.keys(byPath)){ zip.file(p,byPath[p]); n++; }
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',
+      mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='Assessment Gap Report.xlsx'; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+    toast('Downloaded — upload it to Box as a new version, then hit "Mark as uploaded".');
+  }catch(e){ toast('Export failed: '+e.message,1); }
+  btn.disabled=false;
+}
+async function clearPending(){
+  if(!confirm('Clear all '+pendingCount()+' pending edits?\n\nDo this only AFTER you have uploaded the updated workbook to Box, otherwise the changes will be lost.')) return;
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},body:JSON.stringify({action:'overlay_clear',all:true})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    OVERLAY={}; updatePendingUI(); loadGaps();
+    toast('Pending edits cleared — now reading straight from Box.');
+  }catch(e){ toast('Clear failed: '+e.message,1); }
 }
 function editTicket(i){
   const f=WL_ALL[i]; if(!f) return;
@@ -567,6 +656,14 @@ function renderGaps(){
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
   WL_ALL.forEach((f,i)=>f._i=i);
+  // lay pending edits over the values read from Box so everyone sees them now
+  WL_ALL.forEach(f=>{
+    const a=f._cFib&&OVERLAY[f._sheet+'!'+f._cFib+f._row];
+    if(a){ f.fib_status=a.value; f._pendFib=true; }
+    const b=f._cLink&&OVERLAY[f._sheet+'!'+f._cLink+f._row];
+    if(b){ f.jira=b.value; f._pendLink=true; }
+  });
+  updatePendingUI();
   // FIB status choices = whatever the workbook already uses, plus the usual set
   const seen=new Set(WL_ALL.map(f=>(f.fib_status||'').trim()).filter(Boolean));
   ['Done','In Progress','On Hold','Not Started'].forEach(v=>{ if(![...seen].some(s=>s.toLowerCase()===v.toLowerCase())) seen.add(v); });
@@ -598,10 +695,11 @@ function renderWorklist(){
     const liveChip=live?`<div class="tk-live ${live.category==='done'?'done':(live.category==='new'?'todo':'prog')}"><span class="tk-dot"></span>${esc(live.status)}</div>`:'';
     const pen=f._cLink?`<button class="pen" title="Edit ticket — saves to the Box workbook" onclick="event.stopPropagation();editTicket(${f._i})">✎</button>`:'';
     const tk=(key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>`:'<span class="none">no ticket</span>')+pen+liveChip;
-    const fibCell=f._cFib
-      ? `<select class="fibsel" onclick="event.stopPropagation()" onchange="saveCell(${f._i},'fib_status',this.value,this)">`+
+    const fibCell=(f._cFib
+      ? `<select class="fibsel${f._pendFib?' pend':''}" onclick="event.stopPropagation()" onchange="saveCell(${f._i},'fib_status',this.value,this)">`+
         FIB_OPTS.map(o=>`<option value="${esc(o)}"${(f.fib_status||'')===o?' selected':''}>${esc(o||'—')}</option>`).join('')+`</select>`
-      : `<span class="fib-tag">${esc(f.fib_status||'—')}</span>`;
+      : `<span class="fib-tag">${esc(f.fib_status||'—')}</span>`)
+      +(f._pendFib?'<div class="pendtag">● not in Box yet</div>':'');
     const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
     return `<tr class="f-open" onclick="this.classList.toggle('exp')">
       <td><div class="wl-area">${esc(f.area)}</div></td>

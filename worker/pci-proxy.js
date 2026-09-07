@@ -227,6 +227,38 @@ export default {
       return json(200, { project, issues, count: issues.length });
     }
 
+    // ── Shared edit overlay (pending changes not yet pushed into the Box file) ──
+    // Box blocks app config for this account, so edits live here and are applied
+    // on top of the workbook for every viewer, then exported as a new .xlsx.
+    const OV_KEY = "overlay";
+    if (body.action === "overlay_get") {
+      const raw = await env.BOXTOK.get(OV_KEY);
+      return json(200, { overlay: raw ? JSON.parse(raw) : {} });
+    }
+    if (body.action === "overlay_set" || body.action === "overlay_clear") {
+      const cAuth = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
+      const okC = (env.COMMENT_PASSWORD && eq(cAuth, env.COMMENT_PASSWORD)) ||
+                  (!env.COMMENT_PASSWORD && eq(cAuth, env.SITE_PASSWORD));
+      if (!okC) { await new Promise(r => setTimeout(r, 300)); return json(401, { message: "Edit password required" }); }
+      const raw = await env.BOXTOK.get(OV_KEY);
+      const ov = raw ? JSON.parse(raw) : {};
+      if (body.action === "overlay_clear") {
+        if (body.all) { await env.BOXTOK.delete(OV_KEY); return json(200, { ok: true, overlay: {} }); }
+        delete ov[String(body.id || "")];
+      } else {
+        const field = String(body.field || "");
+        if (!["fib_status", "link"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });
+        const sheet = String(body.sheet || "").trim();
+        const cell = String(body.cell || "").trim().toUpperCase();
+        if (!sheet || !/^[A-Z]+\d+$/.test(cell)) return json(400, { message: "Bad sheet/cell" });
+        const value = String(body.value == null ? "" : body.value).slice(0, 500);
+        ov[`${sheet}!${cell}`] = { sheet, cell, field, value, at: new Date().toISOString() };
+        if (Object.keys(ov).length > 2000) return json(400, { message: "Too many pending edits" });
+      }
+      await env.BOXTOK.put(OV_KEY, JSON.stringify(ov));
+      return json(200, { ok: true, count: Object.keys(ov).length });
+    }
+
     // ── Write one cell back into the Box gap workbook (FIB Status / Link only) ──
     if (body.action === "gap_edit") {
       const cAuth = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
