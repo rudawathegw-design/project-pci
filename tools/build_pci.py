@@ -378,7 +378,7 @@ tr.needs-ev td{background:#fffafa}
       <th style="width:150px">Area</th><th>Finding &amp; evidence required</th>
       <th style="width:112px">Ticket</th><th style="width:92px">Client</th>
       <th style="width:96px">Assessor</th><th style="width:118px">FIB status</th>
-    </tr></thead><tbody id="wl-body"><tr><td colspan="5" style="color:#94a3b8;padding:16px">Loading live from Box…</td></tr></tbody></table></div>
+    </tr></thead><tbody id="wl-body"><tr><td colspan="6" style="color:#94a3b8;padding:16px">Loading live from Box…</td></tr></tbody></table></div>
   </div>
   <!-- Jira team-evidence tickets (compact side reference) -->
   <div class="sec" id="jira-sec" style="display:none"><div class="sec-h"><div class="sec-t">Team evidence tickets <small id="jira-sub">Jira epic FIBXPI-49</small></div></div>
@@ -622,7 +622,14 @@ async function loadGaps(){
     src.textContent='● live from Box'; src.style.color='var(--teal-d)';
   }catch(e){ GAPS=(PCI&&PCI.gaps)||{summary:{},areas:[]}; src.textContent='baseline snapshot (Box unavailable)'; }
   await loadOverlay();
-  renderGaps();
+  // Never leave the table stuck on "Loading…" if rendering hits a problem —
+  // surface the reason instead of failing silently.
+  try{ renderGaps(); }
+  catch(err){
+    console.error(err);
+    document.getElementById('wl-body').innerHTML=
+      '<tr><td colspan="6" style="color:#b91c1c;padding:16px">Could not display the findings: '+esc(err.message)+'</td></tr>';
+  }
   loadFindingStatuses();
 }
 // Fetch live Jira status for every ticket referenced by a finding, in one call.
@@ -1041,11 +1048,6 @@ function renderGaps(){
   document.getElementById('sn-closed2').textContent=(gs.closed||0);
   document.getElementById('sn-open').textContent=(gs.open||0);
   document.getElementById('sn-total').textContent=(gs.total||0);
-  // one block per area: width = number of findings, colour = completion
-  document.getElementById('pareas').innerHTML=areas.map(a=>
-    `<span class="pseg" style="flex:${a.total||1};background:${statusColor(a.pct)}"
-      title="${esc(a.name)} — ${a.closed}/${a.total} closed (${a.pct}%)"
-      onclick="filterArea('${esc(a.name).replace(/'/g,"\\'")}')"></span>`).join('');
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
   WL_ALL.forEach((f,i)=>f._i=i);
@@ -1095,7 +1097,7 @@ function renderWorklist(){
   });
   document.getElementById('wl-count').textContent=rows.length+' of '+WL_ALL.length+' findings';
   const body=document.getElementById('wl-body');
-  if(!rows.length){ body.innerHTML='<tr><td colspan="5" style="color:#94a3b8;padding:16px">No findings match.</td></tr>'; return; }
+  if(!rows.length){ body.innerHTML='<tr><td colspan="6" style="color:#94a3b8;padding:16px">No findings match.</td></tr>'; return; }
   body.innerHTML=rows.map(f=>{
     const st=(f.status||'').toLowerCase();
     const stTag=st==='closed'?'<span class="st-tag closed">Closed</span>':(st==='open'?'<span class="st-tag open">Open</span>':`<span class="st-tag na">${esc(f.status||'—')}</span>`);
