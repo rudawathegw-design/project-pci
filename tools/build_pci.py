@@ -202,6 +202,14 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .schip.warn.hot b{color:#b91c1c}
 .schip.warn.on{background:var(--red);border-color:var(--red);color:#fff}.schip.warn.on b,.schip.warn.on i{color:#fff;background:#fff}
 .schip.src{color:var(--teal-d);background:#f0faf9;border-color:#a7f3e6}
+.schip.fu{cursor:pointer}.schip.fu i{background:#2563eb}
+.schip.fu.hot{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.schip.fu.hot b{color:#1d4ed8}
+.schip.fu.on{background:#2563eb;border-color:#2563eb;color:#fff}.schip.fu.on b{color:#fff}.schip.fu.on i{background:#fff}
+/* evidence is in, assessor still Open → nudge them */
+.fu-badge{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:9.5px;font-weight:800;
+  letter-spacing:.03em;text-transform:uppercase;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;
+  border-radius:999px;padding:2px 8px;cursor:pointer;white-space:nowrap}
+.fu-badge:hover{background:#dbeafe;border-color:#93c5fd}
 .pbar{position:relative;height:16px;border-radius:999px;background:#eef2f6;overflow:hidden}
 .pfill{height:100%;border-radius:999px;width:0;transition:width .9s cubic-bezier(.4,0,.2,1);
   background:linear-gradient(90deg,#0f9389,#10b981,#34d399);box-shadow:0 1px 6px rgba(16,185,129,.4)}
@@ -349,6 +357,8 @@ tr.needs-ev td{background:#fffafa}
         <span class="schip bad"><i></i><b id="sn-open">0</b> open</span>
         <span class="schip warn" id="chip-noev" onclick="toggleNoEv()"
               title="Marked Done in FIB status but no client evidence link — click to filter"><i></i><b id="sn-noev">0</b> done, no link</span>
+        <span class="schip fu" id="chip-fu" onclick="toggleFu()"
+              title="Evidence uploaded and work in progress, but the assessor still has it Open — click to filter"><i></i><b id="sn-fu">0</b> follow-up</span>
         <span class="schip src" id="gap-src">—</span>
       </div>
     </div>
@@ -642,18 +652,46 @@ async function loadFindingStatuses(){
     const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'issues',keys})});
     if(!r.ok) return; const d=await r.json();
     (d.issues||[]).forEach(i=>_LIVE[i.key]=i);
+    refreshNoEv();          // follow-up flags depend on live Jira status
     renderWorklist();
   }catch(e){}
 }
-let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_NOEV=false;
+let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_NOEV=false, WL_FU=false;
 function toggleNoEv(){
-  WL_NOEV=!WL_NOEV;
+  WL_NOEV=!WL_NOEV; if(WL_NOEV) WL_FU=false;
   const c=document.getElementById('chip-noev');
   c.classList.toggle('on',WL_NOEV); c.classList.toggle('hot',!WL_NOEV&&WL_ALL.some(f=>f._noEv));
+  const g=document.getElementById('chip-fu');
+  g.classList.remove('on'); g.classList.toggle('hot',WL_ALL.some(f=>f._fu));
   renderWorklist();
 }
+function toggleFu(){
+  WL_FU=!WL_FU; if(WL_FU) WL_NOEV=false;
+  const c=document.getElementById('chip-fu');
+  c.classList.toggle('on',WL_FU); c.classList.toggle('hot',!WL_FU&&WL_ALL.some(f=>f._fu));
+  const g=document.getElementById('chip-noev');
+  g.classList.remove('on'); g.classList.toggle('hot',WL_ALL.some(f=>f._noEv));
+  renderWorklist();
+}
+// One-click chase: ask the assessor to re-review the evidence already uploaded.
+function followUp(i){
+  const f=WL_ALL[i]; if(!f) return;
+  const key=jiraKey(f.jira);
+  if(!key){ toast('No Jira ticket linked to this finding — add one first.',1); return; }
+  const pre='Follow-up: the requested evidence has been uploaded and is linked in the Assessment Gap Report'
+    +' for "'+(f.section||f.area)+'". Could you please re-review and confirm whether anything further is required to close this finding? Thank you.';
+  commentOn(key,pre);
+}
 function refreshNoEv(){
-  WL_ALL.forEach(f=>{ f._noEv=_norm(f.fib_status||'')==='done' && !(f.clients||[]).some(c=>c.v); });
+  WL_ALL.forEach(f=>{
+    const hasEv=(f.clients||[]).some(c=>c.v);
+    f._noEv=_norm(f.fib_status||'')==='done' && !hasEv;
+    // evidence uploaded + work in progress, yet the assessor still has it Open
+    const live=_LIVE[jiraKey(f.jira)];
+    const moving=_norm(f.fib_status||'')==='inprogress' ||
+                 (live && live.category!=='done' && /progress/i.test(live.status||''));
+    f._fu=hasEv && moving && _norm(f.status||'')==='open';
+  });
   const n=WL_ALL.filter(f=>f._noEv).length;
   const el=document.getElementById('sn-noev'); if(el) el.textContent=n;
   const c=document.getElementById('chip-noev'); if(c) c.classList.toggle('hot',n>0&&!WL_NOEV);
@@ -1065,10 +1103,21 @@ function renderGaps(){
     });
   });
   // "Done" in FIB status but no client evidence link — the thing to chase
-  WL_ALL.forEach(f=>{ f._noEv=_norm(f.fib_status||'')==='done' && !(f.clients||[]).some(c=>c.v); });
+  WL_ALL.forEach(f=>{
+    const hasEv=(f.clients||[]).some(c=>c.v);
+    f._noEv=_norm(f.fib_status||'')==='done' && !hasEv;
+    // evidence uploaded + work in progress, yet the assessor still has it Open
+    const live=_LIVE[jiraKey(f.jira)];
+    const moving=_norm(f.fib_status||'')==='inprogress' ||
+                 (live && live.category!=='done' && /progress/i.test(live.status||''));
+    f._fu=hasEv && moving && _norm(f.status||'')==='open';
+  });
   const nNoEv=WL_ALL.filter(f=>f._noEv).length;
   document.getElementById('sn-noev').textContent=nNoEv;
   document.getElementById('chip-noev').classList.toggle('hot',nNoEv>0&&!WL_NOEV);
+  const nFu=WL_ALL.filter(f=>f._fu).length;
+  document.getElementById('sn-fu').textContent=nFu;
+  document.getElementById('chip-fu').classList.toggle('hot',nFu>0&&!WL_FU);
   updatePendingUI();
   // FIB status choices = the workbook's own wording, de-duplicated across
   // spelling variants ("In Progress"/"In progress"), keeping the commonest.
@@ -1090,6 +1139,7 @@ function renderWorklist(){
   const far=document.getElementById('f-area').value;
   let rows=WL_ALL.filter(f=>{
     if(WL_NOEV && !f._noEv) return false;
+    if(WL_FU && !f._fu) return false;
     if(far && f.area!==far) return false;
     if(fst && f.status!==fst) return false;
     if(q){ const hay=(f.area+' '+f.section+' '+f.observation+' '+f.evidence_required+' '+f.recommendation+' '+f.jira+' '+f.fib_status).toLowerCase(); if(!hay.includes(q)) return false; }
@@ -1125,7 +1175,8 @@ function renderWorklist(){
       ? `<select class="fibsel${fcls}${f._pendFib?' pend':''}" onclick="event.stopPropagation()" onchange="saveCell(${f._i},'fib_status',this.value,this)">`+
         FIB_OPTS.map(o=>`<option value="${esc(o)}"${(f.fib_status||'')===o?' selected':''}>${esc(o||'—')}</option>`).join('')+`</select>`
       : `<span class="fib-tag">${esc(f.fib_status||'—')}</span>`)
-      +(f._pendFib?'<div class="pendtag">● not in Box yet</div>':'');
+      +(f._pendFib?'<div class="pendtag">● not in Box yet</div>':'')
+      +(f._fu?`<div><span class="fu-badge" title="Evidence is uploaded but the assessor still has this Open — click to ask them to re-review" onclick="event.stopPropagation();followUp(${f._i})">⚑ Quick follow-up</span></div>`:'');
     const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
     return `<tr class="f-open${f._noEv?' needs-ev':''}" onclick="this.classList.toggle('exp')">
       <td><div class="wl-area">${esc(f.area)}</div></td>
