@@ -853,9 +853,11 @@ function refreshNoEv(){
     f._fu=hasEv && moving && _norm(f.status||'')==='open';
     f._noTk=!jiraKey(f.jira);                       // no Jira ticket linked yet
   });
-  const n=WL_ALL.filter(f=>f._noEv).length;
-  const el=document.getElementById('sn-noev'); if(el) el.textContent=n;
-  const c=document.getElementById('chip-noev'); if(c) c.classList.toggle('hot',n>0&&!WL_NOEV);
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+  set('sn-noev',WL_ALL.filter(f=>f._noEv).length);
+  set('sn-fu',  WL_ALL.filter(f=>f._fu).length);
+  set('sn-notk',WL_ALL.filter(f=>f._noTk).length);
+  updateQuickChips();
 }
 function filterArea(name){
   const sel=document.getElementById('f-area');
