@@ -401,14 +401,16 @@ tr.needs-ev td{background:#fffafa}
   <div class="sec">
     <div class="sec-h"><div class="sec-t">Findings worklist <small id="wl-count"></small></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="cbtn" id="wl-mail" onclick="exportOutlook()" title="Build an Outlook draft asking the assessor to review and close">✉ Email assessor (<span id="mail-n">0</span>)</button>
         <button class="cbtn" id="wl-sync" onclick="syncFromJira()">⟳ Set FIB status from Jira</button>
         <button class="cbtn" id="wl-export" onclick="exportWorkbook()" style="display:none">⬇ Download updated workbook (<span id="pend-n">0</span>)</button>
         <button class="cbtn" id="wl-clear" onclick="clearPending()" style="display:none">✓ Mark as uploaded</button>
       </div></div>
     <div class="filters">
       <input id="f-search" class="f-search" placeholder="Search findings, evidence, ticket…" oninput="renderWorklist()">
-      <select id="f-status" class="f-sel" onchange="renderWorklist()">
+      <select id="f-status" class="f-sel" onchange="renderWorklist()" title="Assessor decision">
         <option value="">All statuses</option><option value="Open">Open only</option><option value="Closed">Closed only</option></select>
+      <select id="f-fib" class="f-sel" onchange="renderWorklist()" title="FIB status"><option value="">All FIB status</option></select>
       <select id="f-area" class="f-sel" onchange="renderWorklist()"><option value="">All areas</option></select>
     </div>
     <div class="wl-wrap"><table class="wl" id="wl"><thead><tr>
@@ -682,7 +684,66 @@ async function loadFindingStatuses(){
     renderWorklist();
   }catch(e){}
 }
-let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_NOEV=false, WL_FU=false;
+let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_NOEV=false, WL_FU=false, WL_VIEW=[];
+/* ── Export the current worklist as an Outlook draft (.eml) ──
+   Written for the follow-up you actually send: "here is what we have completed,
+   please review the evidence and close them". X-Unsent:1 makes Outlook open it
+   as an editable draft rather than a received message.                        */
+function exportOutlook(){
+  const rows=WL_VIEW.slice();
+  if(!rows.length){ toast('Nothing to send — the current filter shows no findings.',1); return; }
+  const doneOnly=rows.filter(f=>_norm(f.fib_status||'')==='done' && _norm(f.status||'')==='open');
+  const useDone=doneOnly.length && doneOnly.length!==rows.length;
+  let list=rows, note='';
+  if(useDone){
+    if(confirm(rows.length+' findings are shown.\n\n'+doneOnly.length+' of them are marked Done by FIB but still Open with the assessor'
+      +' — those are the ones that need closing.\n\nOK = send only those '+doneOnly.length
+      +'\nCancel = send all '+rows.length)){ list=doneOnly; note='completed and awaiting the assessor’s closure'; }
+  }
+  if(!note) note='from the PCI DSS assessment gap report';
+  const esc2=s=>esc(s==null?'':String(s));
+  const byArea={}; list.forEach(f=>{ (byArea[f.area]=byArea[f.area]||[]).push(f); });
+  const today=new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
+  let body=`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.55">
+<p>Dear Assessor,</p>
+<p>Please find below <b>${list.length}</b> finding${list.length>1?'s':''} ${note}. The supporting evidence is linked against each item in the Assessment Gap Report on Box.</p>
+<p>Kindly review and confirm closure, or let us know if anything further is required.</p>`;
+  Object.keys(byArea).sort().forEach(area=>{
+    body+=`<h3 style="font-size:14px;margin:20px 0 7px;color:#0b1f3a;border-bottom:2px solid #0f9389;padding-bottom:4px">${esc2(area)} <span style="font-weight:400;color:#6b7280">(${byArea[area].length})</span></h3>
+<table cellpadding="7" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;font-size:13px">
+<tr style="background:#f1f5f9">
+  <th align="left" style="border:1px solid #dbe3ec;width:26%">Finding</th>
+  <th align="left" style="border:1px solid #dbe3ec">Observation</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:13%">Evidence</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:12%">Ticket</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:10%">FIB status</th></tr>`;
+    byArea[area].forEach(f=>{
+      const ev=(f.clients||[]).filter(c=>c.v&&/^https?:\/\//i.test(c.v))
+        .map((c,n)=>`<a href="${esc2(c.v)}">Evidence${n?(' '+(n+1)):''}</a>`).join('<br>')||'<span style="color:#9ca3af">—</span>';
+      const key=jiraKey(f.jira);
+      const tk=key?`<a href="${esc2(f.jira)}">${esc2(key)}</a>`:'<span style="color:#9ca3af">—</span>';
+      body+=`<tr>
+  <td style="border:1px solid #dbe3ec;vertical-align:top"><b>${esc2(f.section||'Finding')}</b></td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${esc2(f.observation||'')}</td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${ev}</td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${tk}</td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${esc2(f.fib_status||'—')}</td></tr>`;
+    });
+    body+='</table>';
+  });
+  body+=`<p style="margin-top:22px">Best regards,<br>PMO — First Iraq Bank</p>
+<p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:8px">
+Generated from the PCI DSS Compliance Cockpit on ${esc2(today)}.</p></div>`;
+  const subject='PCI DSS — '+list.length+' finding'+(list.length>1?'s':'')+' ready for your review and closure';
+  const eml=['To: ','Subject: '+subject,'X-Unsent: 1','MIME-Version: 1.0',
+    'Content-Type: text/html; charset=UTF-8','Content-Transfer-Encoding: 8bit','',body].join('\r\n');
+  const blob=new Blob([eml],{type:'message/rfc822'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='PCI follow-up '+new Date().toISOString().slice(0,10)+'.eml';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+  toast('Outlook draft downloaded ('+list.length+' findings) — open the .eml, add the assessor and send.');
+}
 function toggleNoEv(){
   WL_NOEV=!WL_NOEV; if(WL_NOEV) WL_FU=false;
   const c=document.getElementById('chip-noev');
@@ -1183,24 +1244,34 @@ function renderGaps(){
   FIB_OPTS=[''].concat(Object.values(counts)
     .map(m=>Object.entries(m).sort((a,b)=>b[1]-a[1])[0][0]).sort());
   // area filter options
-  const sel=document.getElementById('f-area');
+  const sel=document.getElementById('f-area'), keepA=sel.value;
   sel.innerHTML='<option value="">All areas ('+WL_ALL.length+')</option>'+
     areas.map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${a.total})</option>`).join('');
+  sel.value=keepA;
+  const fsel=document.getElementById('f-fib'), keepF=fsel.value;
+  const fibCount={}; WL_ALL.forEach(f=>{ const k=(f.fib_status||'').trim()||'—'; fibCount[k]=(fibCount[k]||0)+1; });
+  fsel.innerHTML='<option value="">All FIB status</option>'+
+    Object.keys(fibCount).sort().map(k=>`<option value="${esc(k)}">${esc(k)} (${fibCount[k]})</option>`).join('');
+  fsel.value=keepF;
   renderWorklist();
 }
 function renderWorklist(){
   const q=(document.getElementById('f-search').value||'').toLowerCase().trim();
   const fst=document.getElementById('f-status').value;
   const far=document.getElementById('f-area').value;
+  const ffib=document.getElementById('f-fib').value;
   let rows=WL_ALL.filter(f=>{
     if(WL_NOEV && !f._noEv) return false;
     if(WL_FU && !f._fu) return false;
     if(far && f.area!==far) return false;
     if(fst && f.status!==fst) return false;
+    if(ffib){ const cur=(f.fib_status||'').trim()||'—'; if(cur!==ffib) return false; }
     if(q){ const hay=(f.area+' '+f.section+' '+f.observation+' '+f.evidence_required+' '+f.recommendation+' '+f.jira+' '+f.fib_status).toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   });
+  WL_VIEW=rows;                                  // what the Outlook export sends
   document.getElementById('wl-count').textContent=rows.length+' of '+WL_ALL.length+' findings';
+  const mn=document.getElementById('mail-n'); if(mn) mn.textContent=rows.length;
   const body=document.getElementById('wl-body');
   if(!rows.length){ body.innerHTML='<tr><td colspan="6" style="color:#94a3b8;padding:16px">No findings match.</td></tr>'; return; }
   body.innerHTML=rows.map(f=>{
