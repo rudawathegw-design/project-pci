@@ -205,6 +205,10 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .wl-ev b{color:#475569;font-weight:700}
 .wl-tk a{font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;text-decoration:none;background:#eef2ff;color:#3730a3;padding:3px 8px;border-radius:7px;white-space:nowrap}
 .wl-tk .none{color:#cbd5e1;font-size:11px}
+.cl-chip{display:inline-block;font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;text-decoration:none;
+  background:#ecfeff;color:#0e7490;padding:3px 8px;border-radius:7px;margin-right:4px;border:1px solid #a5f3fc}
+.cl-chip:hover{background:#cffafe}
+.cl-chip.txt{background:#f8fafc;color:#64748b;border-color:#e2e8f0;font-family:inherit}
 .tk-live{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;margin-top:5px;color:#64748b}
 .tk-dot{width:7px;height:7px;border-radius:50%;background:#f59e0b}
 .tk-live.done .tk-dot{background:#10b981}.tk-live.done{color:#166534}
@@ -308,7 +312,8 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
     </div>
     <div class="wl-wrap"><table class="wl" id="wl"><thead><tr>
       <th style="width:150px">Area</th><th>Finding &amp; evidence required</th>
-      <th style="width:112px">Ticket</th><th style="width:96px">Assessor</th><th style="width:118px">FIB status</th>
+      <th style="width:112px">Ticket</th><th style="width:92px">Client</th>
+      <th style="width:96px">Assessor</th><th style="width:118px">FIB status</th>
     </tr></thead><tbody id="wl-body"><tr><td colspan="5" style="color:#94a3b8;padding:16px">Loading live from Box…</td></tr></tbody></table></div>
   </div>
   <!-- Jira team-evidence tickets (compact side reference) -->
@@ -501,10 +506,14 @@ function parseGaps(wb){
       if(ci.fib<0){ const j=best(st,2); if(j>=0) ci.fib=j; }
       if(ci.link<0){ const j=best(lk,1); if(j>=0) ci.link=j; }
     }
+    // Every "Client Comments" column (HR has two) gets its own compact chip
+    // column next to the ticket, so they're excluded from the extras list.
+    const clientIdx=hdr.map((h,j)=>/client\s*comment/i.test(h)?j:-1).filter(j=>j>=0);
+    if(clientIdx.length) ci.client=clientIdx[0];
     // Columns already rendered in their own place; everything else that carries
-    // text (Client Comments, Additional Comments, Evidences1/2 …) is surfaced
-    // as "extras" so sheets with two comment columns show both.
-    const used=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.fib,ci.link,srCol].filter(x=>x>=0));
+    // text (Additional Comments, Evidences1/2 …) is surfaced as "extras".
+    const used=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.fib,ci.link,srCol]
+      .concat(clientIdx).filter(x=>x>=0));
     const colLetter=n=>{ let s=''; n=n+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
     const findings=[];
     let _k=-1;
@@ -528,7 +537,8 @@ function parseGaps(wb){
       findings.push({section,observation:obs,recommendation:ci.rec>=0?norm(r[ci.rec]):'',
         evidence_required:ci.ev>=0?norm(r[ci.ev]):'',status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
         assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira,
-        extras,_sheet:sn,_row,_cFib,_cLink});
+        clients:clientIdx.map(j=>({c:colLetter(j),h:norm(rows[hi][j])||'Client Comments',v:norm(r[j])})),
+        extras,_sheet:sn,_row,_cFib,_cLink,_cClient:clientIdx.length?colLetter(clientIdx[0]):''});
     }
     const key=norm(sn).toLowerCase();
     let area=byName[key]||areas.find(a=>key.startsWith(a.name.toLowerCase())||a.name.toLowerCase().startsWith(key));
@@ -588,7 +598,7 @@ function updatePendingUI(){
 }
 async function saveCell(i,field,value,el){
   const f=WL_ALL[i]; if(!f) return;
-  const col=field==='fib_status'?f._cFib:f._cLink;
+  const col=field==='fib_status'?f._cFib:(field==='client'?f._cClient:f._cLink);
   if(!col){ toast('That column does not exist in this sheet.',1); return; }
   const prev=f[field]||'';
   const pw=sessionStorage.getItem('pci_pw')||'';
@@ -602,7 +612,8 @@ async function saveCell(i,field,value,el){
       toast('Save failed: '+(d.message||('HTTP '+r.status)),1); return;
     }
     OVERLAY[ovKey(f._sheet,col+f._row)]={sheet:f._sheet.trim(),cell:col+f._row,field,value};
-    f[field]=value; if(field==='link') f.jira=value;
+    if(field==='client'){ if(f.clients&&f.clients[0]) f.clients[0].v=value; f.client_comments=value; f._pendClient=true; }
+    else { f[field]=value; if(field==='link') f.jira=value; }
     if(el) el.disabled=false;
     updatePendingUI(); renderWorklist();
     toast('Saved ✓ — everyone sees it now. Download the workbook to push it into Box.');
@@ -812,6 +823,13 @@ function editTicket(i){
   if(val && /^[A-Za-z]+-\d+$/.test(val)) val='https://fibtask.atlassian.net/browse/'+val.toUpperCase();
   saveCell(i,'link',val,null);
 }
+function editClient(i){
+  const f=WL_ALL[i]; if(!f||!f._cClient) return;
+  const cur=(f.clients&&f.clients[0]&&f.clients[0].v)||'';
+  const v=prompt('Client comment / evidence link (paste the full URL — the table shows only its last 3 characters).\nLeave empty to clear.',cur);
+  if(v===null) return;
+  saveCell(i,'client',v.trim(),null);
+}
 function renderGaps(){
   const gs=GAPS.summary||{}, areas=GAPS.areas||[];
   // strip
@@ -831,6 +849,10 @@ function renderGaps(){
     if(a){ f.fib_status=a.value; f._pendFib=true; }
     const b=f._cLink&&OVERLAY[ovKey(f._sheet,f._cLink+f._row)];
     if(b){ f.jira=b.value; f._pendLink=true; }
+    (f.clients||[]).forEach(c=>{
+      const o=OVERLAY[ovKey(f._sheet,c.c+f._row)];
+      if(o){ c.v=o.value; f._pendClient=true; if(c.c===f._cClient) f.client_comments=o.value; }
+    });
   });
   updatePendingUI();
   // FIB status choices = the workbook's own wording, de-duplicated across
@@ -868,6 +890,18 @@ function renderWorklist(){
     const liveChip=live?`<div class="tk-live ${live.category==='done'?'done':(live.category==='new'?'todo':'prog')}"><span class="tk-dot"></span>${esc(live.status)}</div>`:'';
     const pen=f._cLink?`<button class="pen" title="Edit ticket — saves to the Box workbook" onclick="event.stopPropagation();editTicket(${f._i})">✎</button>`:'';
     const tk=(key?`<a class="wl-tk-a" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(key)}</a>`:'<span class="none">no ticket</span>')+pen+liveChip;
+    // Client comments: show only the last 3 characters of each link, like a tag.
+    const chips=(f.clients||[]).map((c,ci2)=>{
+      if(!c.v) return '';
+      const url=/^https?:\/\//i.test(c.v);
+      const tail=c.v.replace(/[\/\s]+$/,'').slice(-3);
+      return url
+        ? `<a class="cl-chip" href="${esc(c.v)}" target="_blank" rel="noopener" title="${esc(c.h)}: ${esc(c.v)}" onclick="event.stopPropagation()">${esc(tail)}</a>`
+        : `<span class="cl-chip txt" title="${esc(c.h)}: ${esc(c.v)}">${esc(c.v.slice(0,3))}</span>`;
+    }).filter(Boolean).join('');
+    const clientCell=(chips||'<span class="none">no link</span>')
+      +(f._cClient?`<button class="pen" title="Edit client comment link" onclick="event.stopPropagation();editClient(${f._i})">✎</button>`:'')
+      +(f._pendClient?'<div class="pendtag">● not in Box yet</div>':'');
     const fs=(f.fib_status||'').toLowerCase();
     const fcls=fs.includes('done')?' v-done':(fs.includes('progress')?' v-prog':(fs.includes('hold')?' v-hold':(fs.includes('not start')?' v-todo':'')));
     const fibCell=(f._cFib
@@ -890,6 +924,7 @@ function renderWorklist(){
           <div class="wl-acts">${key?`<a class="cbtn" href="${esc(f.jira)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="text-decoration:none">Open ${esc(key)} ↗</a><button class="cbtn" onclick="event.stopPropagation();commentOn('${esc(key)}')">💬 Comment</button>`:'<span style="font-size:11.5px;color:#94a3b8">No linked Jira ticket</span>'}</div>
         </div></td>
       <td class="wl-tk">${tk}</td>
+      <td class="wl-tk">${clientCell}</td>
       <td>${stTag}</td>
       <td>${fibCell}</td></tr>`;
   }).join('');

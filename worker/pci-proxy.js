@@ -296,7 +296,7 @@ export default {
       let n = 0;
       for (const it of items) {
         const field = String(it.field || "");
-        if (!["fib_status", "link"].includes(field)) continue;
+        if (!["fib_status", "link", "client"].includes(field)) continue;
         const sheet = String(it.sheet || "").trim();
         const cell = String(it.cell || "").trim().toUpperCase();
         if (!sheet || !/^[A-Z]+\d+$/.test(cell)) continue;
@@ -320,7 +320,7 @@ export default {
         delete ov[String(body.id || "")];
       } else {
         const field = String(body.field || "");
-        if (!["fib_status", "link"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });
+        if (!["fib_status", "link", "client"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });
         const sheet = String(body.sheet || "").trim();
         const cell = String(body.cell || "").trim().toUpperCase();
         if (!sheet || !/^[A-Z]+\d+$/.test(cell)) return json(400, { message: "Bad sheet/cell" });
@@ -343,7 +343,7 @@ export default {
       const value = String(body.value == null ? "" : body.value);
       const field = String(body.field || "");
       if (!sheet || !/^[A-Z]+\d+$/.test(cell)) return json(400, { message: "Bad sheet/cell" });
-      if (!["fib_status", "link"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });
+      if (!["fib_status", "link", "client"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });
       if (value.length > 500) return json(400, { message: "Value too long" });
       const fileId = env.BOX_FILE_ID;
       if (!fileId) return json(500, { message: "BOX_FILE_ID not set" });
