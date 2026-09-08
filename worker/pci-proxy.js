@@ -340,7 +340,9 @@ export default {
       const ov = raw ? JSON.parse(raw) : {};
       if (body.action === "overlay_clear") {
         if (body.all) { await env.BOXTOK.delete(OV_KEY); return json(200, { ok: true, overlay: {} }); }
-        delete ov[String(body.id || "")];
+        // `ids` lets the cockpit drop every edit it has confirmed present in Box
+        if (Array.isArray(body.ids)) for (const id of body.ids.slice(0, 500)) delete ov[String(id)];
+        else delete ov[String(body.id || "")];
       } else {
         const field = String(body.field || "");
         if (!["fib_status", "link", "client"].includes(field)) return json(403, { message: "Only FIB Status and Link are editable" });

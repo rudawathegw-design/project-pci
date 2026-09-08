@@ -860,6 +860,30 @@ async function loadOverlay(){
     if(r.ok){ const d=await r.json(); OVERLAY=d.overlay||{}; }
   }catch(e){}
 }
+// Compare every pending edit with the value now in the Box workbook; anything
+// that already matches has been uploaded, so it stops being "pending".
+function reconcilePending(){
+  if(!Object.keys(OVERLAY).length||!WL_ALL.length) return;
+  const raw={};                                   // sheet!cell -> value as it is in Box
+  WL_ALL.forEach(f=>{
+    const s=String(f._sheet).trim();
+    if(f._cFib)   raw[s+'!'+f._cFib+f._row]=f.fib_status||'';
+    if(f._cLink)  raw[s+'!'+f._cLink+f._row]=f.jira||'';
+    (f.clients||[]).forEach(c=>{ raw[s+'!'+c.c+f._row]=c.v||''; });
+  });
+  const landed=[];
+  Object.keys(OVERLAY).forEach(k=>{
+    const inBox=raw[k];
+    if(inBox===undefined) return;                 // cell we can't see — leave it alone
+    if(_norm(inBox)===_norm(OVERLAY[k].value)) landed.push(k);
+  });
+  if(!landed.length) return;
+  landed.forEach(k=>delete OVERLAY[k]);
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},
+    body:JSON.stringify({action:'overlay_clear',ids:landed})}).catch(()=>{});
+  toast(landed.length+' edit'+(landed.length>1?'s':'')+' confirmed in Box ✓ — cleared from pending.');
+}
 function pendingCount(){ return Object.keys(OVERLAY).length; }
 function updatePendingUI(){
   const n=pendingCount();
@@ -1113,6 +1137,11 @@ function renderGaps(){
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
   WL_ALL.forEach((f,i)=>f._i=i);
+  // Reconcile against Box: any pending edit whose value already matches the
+  // freshly-downloaded workbook has clearly been uploaded, so drop it. That
+  // keeps "not in Box yet" honest — it only ever means "still to upload".
+  // Costs nothing: the workbook is already parsed, this is a string compare.
+  reconcilePending();
   // lay pending edits over the values read from Box so everyone sees them now.
   // Keys use the TRIMMED sheet name to match how the worker stores them —
   // "HR & Access Control " has a trailing space in the workbook.
