@@ -712,21 +712,18 @@ function exportOutlook(){
     body+=`<h3 style="font-size:14px;margin:20px 0 7px;color:#0b1f3a;border-bottom:2px solid #0f9389;padding-bottom:4px">${esc2(area)} <span style="font-weight:400;color:#6b7280">(${byArea[area].length})</span></h3>
 <table cellpadding="7" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;font-size:13px">
 <tr style="background:#f1f5f9">
-  <th align="left" style="border:1px solid #dbe3ec;width:26%">Finding</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:28%">Finding</th>
   <th align="left" style="border:1px solid #dbe3ec">Observation</th>
-  <th align="left" style="border:1px solid #dbe3ec;width:13%">Evidence</th>
-  <th align="left" style="border:1px solid #dbe3ec;width:12%">Ticket</th>
-  <th align="left" style="border:1px solid #dbe3ec;width:10%">FIB status</th></tr>`;
+  <th align="left" style="border:1px solid #dbe3ec;width:15%">Evidence</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:12%">FIB status</th></tr>`;
     byArea[area].forEach(f=>{
+      // no Jira ticket column here — the assessor has no access to our Jira
       const ev=(f.clients||[]).filter(c=>c.v&&/^https?:\/\//i.test(c.v))
         .map((c,n)=>`<a href="${esc2(c.v)}">Evidence${n?(' '+(n+1)):''}</a>`).join('<br>')||'<span style="color:#9ca3af">—</span>';
-      const key=jiraKey(f.jira);
-      const tk=key?`<a href="${esc2(f.jira)}">${esc2(key)}</a>`:'<span style="color:#9ca3af">—</span>';
       body+=`<tr>
   <td style="border:1px solid #dbe3ec;vertical-align:top"><b>${esc2(f.section||'Finding')}</b></td>
   <td style="border:1px solid #dbe3ec;vertical-align:top">${esc2(f.observation||'')}</td>
   <td style="border:1px solid #dbe3ec;vertical-align:top">${ev}</td>
-  <td style="border:1px solid #dbe3ec;vertical-align:top">${tk}</td>
   <td style="border:1px solid #dbe3ec;vertical-align:top">${esc2(f.fib_status||'—')}</td></tr>`;
     });
     body+='</table>';
