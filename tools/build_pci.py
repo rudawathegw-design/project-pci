@@ -205,10 +205,35 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .pbar{position:relative;height:16px;border-radius:999px;background:#eef2f6;overflow:hidden}
 .pfill{height:100%;border-radius:999px;width:0;transition:width .9s cubic-bezier(.4,0,.2,1);
   background:linear-gradient(90deg,#0f9389,#10b981,#34d399);box-shadow:0 1px 6px rgba(16,185,129,.4)}
-.ptick{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.75)}
-.pareas{display:flex;gap:2px;margin-top:7px;height:7px}
-.pseg{border-radius:2px;cursor:pointer;opacity:.85;transition:.15s;min-width:3px}
-.pseg:hover{opacity:1;transform:scaleY(1.5)}
+/* ── roadmap chain: user-built phases from start to certification ── */
+.chain{display:flex;align-items:flex-start;overflow-x:auto;padding:22px 2px 6px;gap:0}
+.ph{flex:1 0 132px;min-width:132px;position:relative;padding:0 6px;text-align:center;cursor:grab}
+.ph.drag{opacity:.4}.ph.over{background:#f0faf9;border-radius:10px}
+.ph::before{content:"";position:absolute;top:11px;left:0;right:0;height:4px;background:#e2e8f0;border-radius:2px}
+.ph:first-child::before{left:50%}.ph.flag::before{right:50%}
+.ph.lit::before{background:var(--green)}
+.ph-dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:26px;height:26px;border-radius:50%;
+  background:#fff;border:3px solid #cbd5e1;z-index:2;display:grid;place-items:center;font-size:12px;font-weight:900;color:#94a3b8}
+.ph.done .ph-dot{background:var(--green);border-color:var(--green);color:#fff}
+.ph.flag .ph-dot{border-color:var(--teal);background:#fff;font-size:14px}
+.ph.flag.done .ph-dot{background:var(--teal);border-color:var(--teal)}
+.ph-body{margin-top:34px}
+.ph-t{font-size:12.5px;font-weight:800;color:#334155;line-height:1.25;word-break:break-word}
+.ph-n{font-size:10.5px;color:var(--sub);margin-top:3px;line-height:1.35;white-space:pre-wrap;word-break:break-word}
+.ph-s{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:1px 7px;border-radius:999px;margin-top:5px;background:#f1f5f9;color:#64748b}
+.ph:hover .ph-t{color:var(--teal-d)}
+.ph-add{flex:0 0 96px;min-width:96px;display:grid;place-items:center;padding-top:2px}
+.ph-add button{border:1.5px dashed var(--line);background:#fff;color:var(--sub);border-radius:10px;
+  padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.ph-add button:hover{border-color:var(--teal);color:var(--teal-d);background:#f0faf9}
+.sw{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.sw b{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:block}
+.sw b.on{border-color:#0f172a;transform:scale(1.12)}
+.fld{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14px;
+  font-family:inherit;outline:none;margin-top:6px}
+.fld:focus{border-color:var(--teal)}
+.flab{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);margin-top:14px;display:block}
 /* filters */
 .filters{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .f-search{flex:1 1 240px;min-width:180px;border:1.5px solid var(--line);border-radius:10px;padding:9px 13px;font-size:13.5px;outline:none}
@@ -327,9 +352,13 @@ tr.needs-ev td{background:#fffafa}
         <span class="schip src" id="gap-src">—</span>
       </div>
     </div>
-    <div class="pbar"><div class="pfill" id="gap-barfill"></div>
-      <i class="ptick" style="left:25%"></i><i class="ptick" style="left:50%"></i><i class="ptick" style="left:75%"></i></div>
-    <div class="pareas" id="pareas" title="Each block is one review area — width = findings, colour = completion"></div>
+    <div class="pbar"><div class="pfill" id="gap-barfill"></div></div>
+  </div>
+  <!-- roadmap: phases you build yourself, start → certification -->
+  <div class="sec" id="ph-sec">
+    <div class="sec-h"><div class="sec-t">Roadmap <small id="ph-sub">drag to reorder · click a phase to edit</small></div>
+      <button class="cbtn" onclick="addPhase()">+ Add phase</button></div>
+    <div class="chain" id="chain"></div>
   </div>
   <!-- findings worklist -->
   <div class="sec">
@@ -425,6 +454,7 @@ function render(){
   document.getElementById('gen2').textContent=PCI.generated||'';
   document.getElementById('app').style.display='block';
   document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>`<div class="ev-btn" onclick="openEvidence('${e.k}')"><div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
+  loadPhases();   // roadmap chain (shared, editable)
   loadGaps();     // live gap workbook from Box → remediation strip + worklist
   loadEpic();     // live Jira epic FIBXPI-49 → team evidence tickets
   loadActivity(); // live epic activity → status changes, edits, comments
@@ -633,6 +663,125 @@ function toast(msg,bad){
   if(!t){ t=document.createElement('div'); t.id='toast'; document.body.appendChild(t); }
   t.textContent=msg; t.className='show'+(bad?' bad':'');
   clearTimeout(window._tt); window._tt=setTimeout(()=>{t.className='';},bad?6000:2600);
+}
+/* ─────────── Roadmap: phases you build, from start to certification ───────────
+   Stored shared-side so everyone sees the same chain. The last node is the
+   finish flag and is always kept at the end.                                  */
+let PHASES=null;
+const PH_COLORS=['#0f9389','#2563eb','#7c3aed','#db2777','#f59e0b','#ef4444','#0891b2','#64748b'];
+const PH_DEFAULT=[
+  {id:'p1',title:'Initiation',      note:'Kick-off, scope & team',        color:'#0f9389',status:'done'},
+  {id:'p2',title:'Gap Assessment',  note:'Assessor review of all areas',  color:'#2563eb',status:'doing'},
+  {id:'p3',title:'Remediation',     note:'Close findings, collect evidence',color:'#7c3aed',status:'todo'},
+  {id:'p4',title:'Validation',      note:'Assessor re-check & sign-off',  color:'#f59e0b',status:'todo'},
+  {id:'pf',title:'Certified',       note:'PCI DSS certification achieved',color:'#0f9389',status:'todo',flag:true},
+];
+async function loadPhases(){
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw},body:JSON.stringify({action:'phases_get'})});
+    if(r.ok){ const d=await r.json(); PHASES=(d.phases&&d.phases.length)?d.phases:PH_DEFAULT.slice(); }
+  }catch(e){}
+  if(!PHASES) PHASES=PH_DEFAULT.slice();
+  renderChain();
+}
+async function savePhases(){
+  const pw=sessionStorage.getItem('pci_pw')||'';
+  try{
+    const r=await fetch(GH_PROXY,{method:'POST',headers:{'Content-Type':'application/json','X-Proxy-Auth':pw,'X-Comment-Auth':pw},
+      body:JSON.stringify({action:'phases_set',phases:PHASES})});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.message||('HTTP '+r.status)); }
+    toast('Roadmap saved ✓');
+  }catch(e){ toast('Could not save roadmap: '+e.message,1); }
+}
+function renderChain(){
+  const el=document.getElementById('chain'); if(!el||!PHASES) return;
+  // keep the finish flag last
+  const fi=PHASES.findIndex(p=>p.flag);
+  if(fi>=0&&fi!==PHASES.length-1) PHASES.push(PHASES.splice(fi,1)[0]);
+  const lastDone=PHASES.reduce((a,p,i)=>p.status==='done'?i:a,-1);
+  const label={todo:'Not started',doing:'In progress',done:'Done'};
+  el.innerHTML=PHASES.map((p,i)=>{
+    const done=p.status==='done';
+    const lit=i<=lastDone;                       // green line up to the last completed phase
+    const mark=p.flag?'⚑':(done?'✓':(p.status==='doing'?'●':i+1));
+    const dot=done?'':`style="border-color:${esc(p.color)};color:${esc(p.color)}"`;
+    return `<div class="ph ${done?'done':''} ${lit?'lit':''} ${p.flag?'flag':''}" draggable="true" data-i="${i}"
+              onclick="editPhase(${i})" title="Click to edit · drag to reorder">
+      <div class="ph-dot" ${dot}>${mark}</div>
+      <div class="ph-body"><div class="ph-t">${esc(p.title)}</div>
+        ${p.note?`<div class="ph-n">${esc(p.note)}</div>`:''}
+        <span class="ph-s" ${done?'style="background:#dcfce7;color:#166534"':(p.status==='doing'?`style="background:${esc(p.color)}1a;color:${esc(p.color)}"`:'')}>${label[p.status]}</span>
+      </div></div>`;
+  }).join('')+`<div class="ph-add"><button onclick="event.stopPropagation();addPhase()">+ Phase</button></div>`;
+  const done=PHASES.filter(p=>p.status==='done').length;
+  document.getElementById('ph-sub').textContent=done+' of '+PHASES.length+' phases complete · drag to reorder · click to edit';
+  wireChainDrag();
+}
+let _drag=null;
+function wireChainDrag(){
+  document.querySelectorAll('#chain .ph').forEach(n=>{
+    n.ondragstart=e=>{_drag=+n.dataset.i; n.classList.add('drag'); e.dataTransfer.effectAllowed='move';};
+    n.ondragend=()=>{_drag=null; document.querySelectorAll('#chain .ph').forEach(x=>x.classList.remove('drag','over'));};
+    n.ondragover=e=>{e.preventDefault(); n.classList.add('over');};
+    n.ondragleave=()=>n.classList.remove('over');
+    n.ondrop=e=>{e.preventDefault(); const to=+n.dataset.i;
+      if(_drag===null||_drag===to) return;
+      PHASES.splice(to,0,PHASES.splice(_drag,1)[0]);
+      renderChain(); savePhases();};
+  });
+}
+function addPhase(){
+  if(!PHASES) return;
+  const at=Math.max(0,PHASES.findIndex(p=>p.flag));           // insert before the finish flag
+  PHASES.splice(at<0?PHASES.length:at,0,
+    {id:'p'+Date.now(),title:'New phase',note:'',color:PH_COLORS[PHASES.length%PH_COLORS.length],status:'todo'});
+  renderChain(); savePhases();
+  editPhase(at<0?PHASES.length-1:at);
+}
+function editPhase(i){
+  const p=PHASES[i]; if(!p) return;
+  const m=document.getElementById('ov-modal'); m.classList.remove('full','wide');
+  document.getElementById('ov-body').classList.remove('flush');
+  document.getElementById('ov-title').textContent='Edit phase';
+  document.getElementById('ov-body').innerHTML=`
+    <label class="flab">Title</label>
+    <input id="ph-title" class="fld" value="${esc(p.title)}" maxlength="80">
+    <label class="flab">Note</label>
+    <textarea id="ph-note" class="fld" rows="3" maxlength="400" placeholder="Optional detail…">${esc(p.note||'')}</textarea>
+    <label class="flab">Status</label>
+    <select id="ph-status" class="fld">
+      <option value="todo"${p.status==='todo'?' selected':''}>Not started</option>
+      <option value="doing"${p.status==='doing'?' selected':''}>In progress</option>
+      <option value="done"${p.status==='done'?' selected':''}>Done (bullet turns green)</option>
+    </select>
+    <label class="flab">Colour</label>
+    <div class="sw" id="ph-sw">${PH_COLORS.map(c=>`<b data-c="${c}" style="background:${c}" class="${c===p.color?'on':''}" onclick="phPick(this)"></b>`).join('')}</div>
+    <div class="f-links" style="margin-top:20px">
+      <button class="cbtn" onclick="phMove(${i},-1)">◀ Move left</button>
+      <button class="cbtn" onclick="phMove(${i},1)">Move right ▶</button>
+      ${p.flag?'':`<button class="cbtn" style="color:#b91c1c;border-color:#fca5a5" onclick="phDelete(${i})">Delete</button>`}
+      <button class="cbtn" style="background:var(--teal);color:#fff;border-color:var(--teal)" onclick="phSave(${i})">Save phase</button>
+    </div>`;
+  document.getElementById('ov').classList.add('show');
+}
+function phPick(b){ document.querySelectorAll('#ph-sw b').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }
+function phSave(i){
+  const p=PHASES[i]; if(!p) return;
+  p.title=(document.getElementById('ph-title').value||'Phase').trim().slice(0,80);
+  p.note=(document.getElementById('ph-note').value||'').trim().slice(0,400);
+  p.status=document.getElementById('ph-status').value;
+  const sw=document.querySelector('#ph-sw b.on'); if(sw) p.color=sw.dataset.c;
+  closeOv(); renderChain(); savePhases();
+}
+function phMove(i,d){
+  const j=i+d; if(j<0||j>=PHASES.length) return;
+  PHASES.splice(j,0,PHASES.splice(i,1)[0]);
+  closeOv(); renderChain(); savePhases();
+}
+function phDelete(i){
+  if(!confirm('Delete phase "'+PHASES[i].title+'"?')) return;
+  PHASES.splice(i,1); closeOv(); renderChain(); savePhases();
 }
 const ovKey=(sheet,cell)=>String(sheet).trim()+'!'+cell;   // must match the worker
 async function loadOverlay(){

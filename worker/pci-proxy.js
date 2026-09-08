@@ -285,6 +285,29 @@ export default {
       const raw = await env.BOXTOK.get(OV_KEY);
       return json(200, { overlay: raw ? JSON.parse(raw) : {} });
     }
+    // ── Roadmap phases (user-built chain shown at the top of the cockpit) ──
+    const PH_KEY = "phases";
+    if (body.action === "phases_get") {
+      const raw = await env.BOXTOK.get(PH_KEY);
+      return json(200, { phases: raw ? JSON.parse(raw) : null });
+    }
+    if (body.action === "phases_set") {
+      const cP = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
+      const okP = (env.COMMENT_PASSWORD && eq(cP, env.COMMENT_PASSWORD)) ||
+                  (!env.COMMENT_PASSWORD && eq(cP, env.SITE_PASSWORD));
+      if (!okP) { await new Promise(r => setTimeout(r, 300)); return json(401, { message: "Edit password required" }); }
+      const list = Array.isArray(body.phases) ? body.phases.slice(0, 40) : [];
+      const clean = list.map((p, i) => ({
+        id: String(p.id || ("p" + i)).slice(0, 40),
+        title: String(p.title || "Phase").slice(0, 80),
+        note: String(p.note || "").slice(0, 400),
+        color: /^#[0-9a-fA-F]{6}$/.test(String(p.color || "")) ? p.color : "#0f9389",
+        status: ["todo", "doing", "done"].includes(p.status) ? p.status : "todo",
+        flag: !!p.flag,
+      }));
+      await env.BOXTOK.put(PH_KEY, JSON.stringify(clean));
+      return json(200, { ok: true, count: clean.length });
+    }
     if (body.action === "overlay_set_many") {
       const cA = (request.headers.get("X-Comment-Auth") || "").trim().toLowerCase();
       const ok2 = (env.COMMENT_PASSWORD && eq(cA, env.COMMENT_PASSWORD)) ||
