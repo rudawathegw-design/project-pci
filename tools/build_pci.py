@@ -22,16 +22,12 @@ GH_PROXY = os.environ.get("PCI_PROXY", "https://project-pci-proxy.rudaw-a-the-gw
 # Box evidence embeds — folders (share links) + the two source workbooks.
 EVIDENCE = [
     {"k": "evidences", "t": "Evidence library",  "s": "Screenshots, configs & supporting proofs",
-     "i": "🗂", "c": "#0f9389",
      "url": "https://app.box.com/embed/s/698kt3rxy7akyza01za5lmtr68t6zdq4?sortColumn=date"},
     {"k": "whole",     "t": "Full evidence set",  "s": "Complete shared evidence folder",
-     "i": "📁", "c": "#2563eb",
      "url": "https://app.box.com/embed/s/cjmt5wsne4qd585uaqfqf2n1jmocx6qx?sortColumn=date"},
     {"k": "gaps",      "t": "Gap report (Excel)", "s": "Assessment findings workbook",
-     "i": "📊", "c": "#db2777",
      "url": "https://app.box.com/embed/s/aa38b8t7vyhe5xazjw8ycqwhnklwh4j2"},
     {"k": "milestones","t": "Milestones plan (Excel)", "s": "PCI DSS project plan workbook",
-     "i": "🗓", "c": "#7c3aed",
      "url": "https://app.box.com/embed/s/uznh5wcvxbif8vv25qtiogwwe2sppujb"},
 ]
 
@@ -124,25 +120,31 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .pill{display:inline-flex;align-items:center;gap:5px;font-weight:700}.pill b{font-weight:900}
 .dot-o{width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block}
 .dot-c{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block}
-.ev-sec{background:linear-gradient(160deg,#0b1f3a,#12294b);border:none;box-shadow:0 10px 30px rgba(11,31,58,.18)}
-.ev-sec .sec-t{color:#fff}.ev-sec .sec-t small{color:#8fb0d8}
+/* documents: light glossy glass tiles, sitting right under the title */
+.ev-sec{margin-bottom:18px}
+.ev-head{font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--slate);
+  margin:0 2px 10px}
+.ev-head small{font-weight:600;letter-spacing:.02em;text-transform:none;font-size:11.5px;color:#b6c2d1;margin-left:8px}
 .ev-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
-.ev-btn{position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.14);border-radius:14px;
-  padding:16px 17px;background:rgba(255,255,255,.06);cursor:pointer;text-align:left;
-  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease}
-.ev-btn .ic{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:17px;
-  margin-bottom:11px;background:var(--ac);box-shadow:0 4px 14px color-mix(in srgb,var(--ac) 55%,transparent)}
-.ev-btn .t{font-weight:800;font-size:14px;color:#fff;letter-spacing:-.01em}
-.ev-btn .s{font-size:11.5px;color:#a9c0dc;margin-top:4px;line-height:1.4}
-.ev-btn .go{position:absolute;top:16px;right:16px;color:#7f9dc4;font-size:14px;transition:.18s}
-.ev-btn:hover{transform:translateY(-3px);background:rgba(255,255,255,.11);
-  border-color:color-mix(in srgb,var(--ac) 70%,transparent);
-  box-shadow:0 14px 34px rgba(0,0,0,.3),0 0 0 1px color-mix(in srgb,var(--ac) 45%,transparent)}
-.ev-btn:hover .go{color:#fff;transform:translateX(3px)}
-/* light sweep across the tile on hover */
-.ev-btn::after{content:"";position:absolute;top:0;left:-80%;width:55%;height:100%;pointer-events:none;
-  background:linear-gradient(120deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-22deg)}
-.ev-btn:hover::after{animation:evShine .75s ease forwards}
+.ev-btn{position:relative;overflow:hidden;cursor:pointer;text-align:left;border-radius:14px;padding:17px 18px;
+  border:1px solid rgba(255,255,255,.9);
+  background:linear-gradient(180deg,#ffffff 0%,#f7fafc 55%,#eef4f9 100%);
+  box-shadow:0 1px 0 #fff inset,0 8px 22px rgba(15,31,58,.08),0 1px 3px rgba(15,31,58,.06);
+  transition:transform .2s ease,box-shadow .2s ease}
+/* glass highlight across the top half */
+.ev-btn::before{content:"";position:absolute;inset:0 0 auto 0;height:52%;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(255,255,255,0));border-radius:14px 14px 40% 40%/14px 14px 100% 100%}
+.ev-btn .t{position:relative;font-weight:800;font-size:14.5px;color:#0f172a;letter-spacing:-.01em}
+.ev-btn .s{position:relative;font-size:11.5px;color:var(--sub);margin-top:5px;line-height:1.45}
+.ev-btn .go{position:absolute;top:16px;right:16px;color:#c3ceda;font-size:14px;transition:.2s;z-index:2}
+.ev-btn:hover{transform:translateY(-3px);
+  box-shadow:0 1px 0 #fff inset,0 16px 34px rgba(15,31,58,.14),0 0 0 1px rgba(15,147,137,.35)}
+.ev-btn:hover .go{color:var(--teal-d);transform:translateX(3px)}
+.ev-btn:active{transform:translateY(-1px)}
+/* sheen sweep on hover */
+.ev-btn::after{content:"";position:absolute;top:0;left:-80%;width:55%;height:100%;pointer-events:none;z-index:1;
+  background:linear-gradient(120deg,transparent,rgba(255,255,255,.85),transparent);transform:skewX(-22deg)}
+.ev-btn:hover::after{animation:evShine .8s ease forwards}
 @keyframes evShine{to{left:135%}}
 .ov{position:fixed;inset:0;background:rgba(11,31,58,.55);backdrop-filter:blur(5px);z-index:1100;display:none;align-items:center;justify-content:center;padding:20px}
 .ov.show{display:flex}
@@ -365,6 +367,11 @@ tr.needs-ev td{background:#fffafa}
       <div><div class="brand-t">PCI DSS Compliance Cockpit</div><div class="brand-s" id="proj"></div></div></div>
     <div class="gen" id="gen"></div>
   </div>
+  <!-- documents & evidence — first thing under the title -->
+  <div class="ev-sec">
+    <div class="ev-head">Documents &amp; evidence <small>opens full-screen from Box</small></div>
+    <div class="ev-row" id="ev-row"></div>
+  </div>
   <!-- remediation progress -->
   <div class="strip">
     <div class="strip-head">
@@ -383,10 +390,6 @@ tr.needs-ev td{background:#fffafa}
       </div>
     </div>
     <div class="pbar"><div class="pfill" id="gap-barfill"></div></div>
-  </div>
-  <!-- documents & evidence — quick access, straight from Box -->
-  <div class="sec ev-sec"><div class="sec-h"><div class="sec-t">Documents &amp; evidence <small>opens full-screen from Box</small></div></div>
-    <div class="ev-row" id="ev-row"></div>
   </div>
   <!-- roadmap: phases you build yourself, start → certification -->
   <div class="sec" id="ph-sec">
@@ -485,8 +488,7 @@ function render(){
   document.getElementById('gen2').textContent=PCI.generated||'';
   document.getElementById('app').style.display='block';
   document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>
-    `<div class="ev-btn" style="--ac:${esc(e.c||'#0f9389')}" onclick="openEvidence('${e.k}')">
-       <div class="ic">${esc(e.i||'📄')}</div><span class="go">↗</span>
+    `<div class="ev-btn" onclick="openEvidence('${e.k}')"><span class="go">↗</span>
        <div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
   loadPhases();   // roadmap chain (shared, editable)
   loadGaps();     // live gap workbook from Box → remediation strip + worklist
