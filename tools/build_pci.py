@@ -764,7 +764,7 @@ function exportTeamEmail(){
     const closed=_norm(f.status||'')==='closed';
     if(closed) return {t:'Closed by the assessor — no further action.',c:'#166534',b:'#dcfce7'};
     if(hasEv) return {t:'Evidence submitted did not fully satisfy the requirement — additional or clarified evidence is required.',c:'#b45309',b:'#fef3c7'};
-    return {t:'Evidence outstanding — please prepare, upload to Box and link it against this finding.',c:'#b91c1c',b:'#fee2e2'};
+    return {t:'Evidence outstanding — please prepare and upload the required evidence to Jira.',c:'#b91c1c',b:'#fee2e2'};
   };
   const nMore=list.filter(f=>_norm(f.status||'')!=='closed'&&(f.clients||[]).some(c=>c.v)).length;
   const nNone=list.filter(f=>_norm(f.status||'')!=='closed'&&!(f.clients||[]).some(c=>c.v)).length;
@@ -777,7 +777,7 @@ function exportTeamEmail(){
   ${nMore?`<li><b>${nMore}</b> where evidence was submitted but <b>did not fully satisfy the requirement</b> — additional or clarified evidence is needed.</li>`:''}
   ${nNone?`<li><b>${nNone}</b> where <b>no evidence has been provided yet</b>.</li>`:''}
 </ul>
-<p>Please action your assigned items via the linked Jira ticket, upload the evidence to Box, and link it in the gap report.</p>`;
+<p>Please action your assigned items and upload the required evidence to the linked Jira ticket.</p>`;
   Object.keys(byArea).sort().forEach(area=>{
     body+=`<h3 style="font-size:14px;margin:20px 0 7px;color:#0b1f3a;border-bottom:2px solid #0f9389;padding-bottom:4px">${esc2(area)} <span style="font-weight:400;color:#6b7280">(${byArea[area].length})</span></h3>
 <table cellpadding="7" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;font-size:13px">
