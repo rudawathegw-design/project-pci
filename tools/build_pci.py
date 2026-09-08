@@ -401,7 +401,8 @@ tr.needs-ev td{background:#fffafa}
   <div class="sec">
     <div class="sec-h"><div class="sec-t">Findings worklist <small id="wl-count"></small></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="cbtn" id="wl-mail" onclick="exportOutlook()" title="Build an Outlook draft asking the assessor to review and close">✉ Email assessor (<span id="mail-n">0</span>)</button>
+        <button class="cbtn" id="wl-mail" onclick="exportOutlook()" title="Outlook draft for the assessor — no Jira, evidence links only">✉ Email assessor (<span id="mail-n">0</span>)</button>
+        <button class="cbtn" id="wl-mail-team" onclick="exportTeamEmail()" title="Outlook draft for the FIB team — includes Jira tickets, owners and the action required">✉ Email FIB team (<span id="mail-t">0</span>)</button>
         <button class="cbtn" id="wl-sync" onclick="syncFromJira()">⟳ Set FIB status from Jira</button>
         <button class="cbtn" id="wl-export" onclick="exportWorkbook()" style="display:none">⬇ Download updated workbook (<span id="pend-n">0</span>)</button>
         <button class="cbtn" id="wl-clear" onclick="clearPending()" style="display:none">✓ Mark as uploaded</button>
@@ -733,14 +734,82 @@ function exportOutlook(){
 Generated from the PCI DSS Compliance Cockpit on ${esc2(today)}.</p></div>`;
   // keep the Subject header pure ASCII — Outlook mangles raw UTF-8 in headers
   const subject='PCI DSS - '+list.length+' finding'+(list.length>1?'s':'')+' ready for your review and closure';
+  downloadEml(subject,body,'PCI follow-up assessor '+new Date().toISOString().slice(0,10)+'.eml');
+  toast('Outlook draft downloaded ('+list.length+' findings) — open the .eml, add the assessor and send.');
+}
+function downloadEml(subject,body,filename){
   const eml=['To: ','Subject: '+subject,'X-Unsent: 1','MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8','Content-Transfer-Encoding: 8bit','',body].join('\r\n');
   const blob=new Blob([eml],{type:'message/rfc822'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='PCI follow-up '+new Date().toISOString().slice(0,10)+'.eml';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename;
   document.body.appendChild(a); a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
-  toast('Outlook draft downloaded ('+list.length+' findings) — open the .eml, add the assessor and send.');
+}
+/* ── Internal action list for the FIB team ──
+   Keeps the Jira ticket and owner (we have access), and states plainly what is
+   still required — the key case being evidence that was submitted but did not
+   satisfy the assessor.                                                       */
+function exportTeamEmail(){
+  const rows=WL_VIEW.slice();
+  if(!rows.length){ toast('Nothing to send — the current filter shows no findings.',1); return; }
+  const open=rows.filter(f=>_norm(f.status||'')==='open');
+  let list=rows;
+  if(open.length && open.length!==rows.length){
+    list=confirm(rows.length+' findings are shown.\n\n'+open.length+' are still OPEN with the assessor and need action from the team.'
+      +'\n\nOK = send only those '+open.length+'\nCancel = send all '+rows.length)?open:rows;
+  }
+  const esc2=s=>esc(s==null?'':String(s));
+  const action=f=>{
+    const hasEv=(f.clients||[]).some(c=>c.v);
+    const closed=_norm(f.status||'')==='closed';
+    if(closed) return {t:'Closed by the assessor — no further action.',c:'#166534',b:'#dcfce7'};
+    if(hasEv) return {t:'Evidence submitted did not fully satisfy the requirement — additional or clarified evidence is required.',c:'#b45309',b:'#fef3c7'};
+    return {t:'Evidence outstanding — please prepare, upload to Box and link it against this finding.',c:'#b91c1c',b:'#fee2e2'};
+  };
+  const nMore=list.filter(f=>_norm(f.status||'')!=='closed'&&(f.clients||[]).some(c=>c.v)).length;
+  const nNone=list.filter(f=>_norm(f.status||'')!=='closed'&&!(f.clients||[]).some(c=>c.v)).length;
+  const byArea={}; list.forEach(f=>{ (byArea[f.area]=byArea[f.area]||[]).push(f); });
+  const today=new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
+  let body=`<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1f2937;line-height:1.55">
+<p>Dear team,</p>
+<p>Below are <b>${list.length}</b> PCI DSS finding${list.length>1?'s':''} requiring our action, taken from the assessor's gap report.</p>
+<ul style="margin:10px 0 16px;padding-left:20px">
+  ${nMore?`<li><b>${nMore}</b> where evidence was submitted but <b>did not fully satisfy the requirement</b> — additional or clarified evidence is needed.</li>`:''}
+  ${nNone?`<li><b>${nNone}</b> where <b>no evidence has been provided yet</b>.</li>`:''}
+</ul>
+<p>Please action your assigned items via the linked Jira ticket, upload the evidence to Box, and link it in the gap report.</p>`;
+  Object.keys(byArea).sort().forEach(area=>{
+    body+=`<h3 style="font-size:14px;margin:20px 0 7px;color:#0b1f3a;border-bottom:2px solid #0f9389;padding-bottom:4px">${esc2(area)} <span style="font-weight:400;color:#6b7280">(${byArea[area].length})</span></h3>
+<table cellpadding="7" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;font-size:13px">
+<tr style="background:#f1f5f9">
+  <th align="left" style="border:1px solid #dbe3ec;width:24%">Finding</th>
+  <th align="left" style="border:1px solid #dbe3ec">Evidence required</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:11%">Ticket</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:13%">Owner</th>
+  <th align="left" style="border:1px solid #dbe3ec;width:26%">Action required</th></tr>`;
+    byArea[area].forEach(f=>{
+      const a=action(f), key=jiraKey(f.jira), live=key?_LIVE[key]:null;
+      const tk=key?`<a href="${esc2(f.jira)}">${esc2(key)}</a>${live?`<div style="color:#6b7280;font-size:11px">${esc2(live.status)}</div>`:''}`
+                  :'<span style="color:#9ca3af">no ticket</span>';
+      const ev=(f.clients||[]).filter(c=>c.v&&/^https?:\/\//i.test(c.v))
+        .map((c,n)=>`<a href="${esc2(c.v)}">evidence${n?(' '+(n+1)):''}</a>`).join(', ');
+      body+=`<tr>
+  <td style="border:1px solid #dbe3ec;vertical-align:top"><b>${esc2(f.section||'Finding')}</b>
+    <div style="color:#6b7280;font-size:11.5px;margin-top:3px">${esc2((f.observation||'').slice(0,160))}${(f.observation||'').length>160?'…':''}</div></td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${esc2(f.evidence_required||'—')}
+    ${ev?`<div style="margin-top:4px;font-size:11.5px">Submitted: ${ev}</div>`:''}</td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${tk}</td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top">${esc2((live&&live.assignee)||'—')}</td>
+  <td style="border:1px solid #dbe3ec;vertical-align:top;background:${a.b};color:${a.c}">${esc2(a.t)}</td></tr>`;
+    });
+    body+='</table>';
+  });
+  body+=`<p style="margin-top:22px">Thank you,<br>PMO — First Iraq Bank</p>
+<p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:8px">
+Generated from the PCI DSS Compliance Cockpit on ${esc2(today)}.</p></div>`;
+  const subject='PCI DSS - action required on '+list.length+' finding'+(list.length>1?'s':'');
+  downloadEml(subject,body,'PCI action list team '+new Date().toISOString().slice(0,10)+'.eml');
+  toast('Outlook draft downloaded ('+list.length+' findings) — open the .eml, add the team and send.');
 }
 function toggleNoEv(){
   WL_NOEV=!WL_NOEV; if(WL_NOEV) WL_FU=false;
@@ -1270,6 +1339,7 @@ function renderWorklist(){
   WL_VIEW=rows;                                  // what the Outlook export sends
   document.getElementById('wl-count').textContent=rows.length+' of '+WL_ALL.length+' findings';
   const mn=document.getElementById('mail-n'); if(mn) mn.textContent=rows.length;
+  const mt=document.getElementById('mail-t'); if(mt) mt.textContent=rows.length;
   const body=document.getElementById('wl-body');
   if(!rows.length){ body.innerHTML='<tr><td colspan="6" style="color:#94a3b8;padding:16px">No findings match.</td></tr>'; return; }
   body.innerHTML=rows.map(f=>{
