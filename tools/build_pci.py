@@ -26,7 +26,7 @@ EVIDENCE = [
     {"k": "whole",     "t": "Full evidence set",  "s": "Complete shared evidence folder",
      "url": "https://app.box.com/embed/s/cjmt5wsne4qd585uaqfqf2n1jmocx6qx?sortColumn=date"},
     {"k": "gaps",      "t": "Gap report (Excel)", "s": "Assessment findings workbook",
-     "url": "https://app.box.com/embed/s/aa38b8t7vyhe5xazjw8ycqwhnklwh4j2"},
+     "url": "https://app.box.com/embed/s/yu0o7y32j0gj1f7sp3tmnezml6h2gp3u"},
     {"k": "milestones","t": "Milestones plan (Excel)", "s": "PCI DSS project plan workbook",
      "url": "https://app.box.com/embed/s/uznh5wcvxbif8vv25qtiogwwe2sppujb"},
 ]
@@ -625,9 +625,14 @@ function parseGaps(wb){
       .concat(clientIdx).filter(x=>x>=0));
     const colLetter=n=>{ let s=''; n=n+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
     const findings=[];
-    let _k=-1;
+    let _k=-1, oCount=0, cCount=0;
     for(const r of rows.slice(hi+1)){
       _k++;
+      // Count every row's assessor Status, even rows with no observation text —
+      // this mirrors the workbook's own COUNTIF and does not rely on Excel
+      // having cached the formula results (some exports save them empty).
+      const _st=ci.status>=0?norm(r[ci.status]).toLowerCase():'';
+      if(_st.includes('clos')) cCount++; else if(_st.includes('open')) oCount++;
       const section=ci.section>=0?norm(r[ci.section]):'', obs=ci.obs>=0?norm(r[ci.obs]):'';
       if(!section&&!obs) continue;
       // exact spreadsheet coordinates so edits can be written back to Box
@@ -651,10 +656,18 @@ function parseGaps(wb){
     }
     const key=norm(sn).toLowerCase();
     let area=byName[key]||areas.find(a=>key.startsWith(a.name.toLowerCase())||a.name.toLowerCase().startsWith(key));
-    if(area){ area.findings=findings; }
-    else{ const o=findings.filter(f=>f.status==='Open').length,c=findings.filter(f=>f.status==='Closed').length,t=findings.length;
-      areas.push({name:norm(sn),open:o,closed:c,total:t,pct:t?Math.round(100*c/t):0,findings}); }
+    const t=oCount+cCount;
+    if(area){
+      area.findings=findings;
+      if(t){ area.open=oCount; area.closed=cCount; area.total=t; area.pct=Math.round(100*cCount/t); }
+    }else{
+      areas.push({name:norm(sn),open:oCount,closed:cCount,total:t,pct:t?Math.round(100*cCount/t):0,findings});
+    }
   }
+  // Roll the totals up from the sheets themselves rather than the summary tab,
+  // so the headline stays right even when cached formula values are missing.
+  const tO=areas.reduce((a,x)=>a+(x.open||0),0), tC=areas.reduce((a,x)=>a+(x.closed||0),0), tT=tO+tC;
+  if(tT) summary={open:tO,closed:tC,total:tT,pct:Math.round(100*tC/tT)};
   return {summary,areas};
 }
 async function loadGaps(){
