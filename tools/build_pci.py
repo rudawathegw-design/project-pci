@@ -182,12 +182,33 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 /* task modal */
 .tm-row{font-size:13.5px;color:#334155;margin-top:8px;line-height:1.5}.tm-row b{color:#0f172a}
 /* remediation strip */
-.strip{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:18px;flex-wrap:wrap}
-.strip-pct{display:flex;flex-direction:column;line-height:1}.strip-pct span{font-size:30px;font-weight:900;letter-spacing:-.02em;color:var(--teal-d)}
-.strip-pct small{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin-top:4px}
-.strip-bar{flex:1 1 200px;height:12px;border-radius:999px;background:#eef2f6;overflow:hidden;min-width:160px}
-.strip-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#0f9389,#10b981);width:0;transition:width .6s}
-.strip-nums{display:flex;gap:16px;flex-wrap:wrap}.sn{font-size:12.5px;color:var(--sub);font-weight:600}.sn b{font-weight:900;color:#0f172a}
+.strip{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px 15px;margin-bottom:18px;
+  box-shadow:0 1px 2px rgba(15,31,58,.04)}
+.strip-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:13px}
+.strip-left{display:flex;align-items:baseline;gap:13px}
+.strip-pct span{font-size:42px;font-weight:900;letter-spacing:-.035em;line-height:1;
+  background:linear-gradient(95deg,#0f9389,#10b981);-webkit-background-clip:text;background-clip:text;color:transparent}
+.strip-lbl{font-size:13px;font-weight:800;color:#334155;line-height:1.3}
+.strip-lbl small{display:block;font-size:11.5px;font-weight:600;color:var(--sub);margin-top:3px}
+.strip-lbl small b{font-weight:900;color:#0f172a}
+.strip-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.schip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#475569;
+  background:#f8fafc;border:1px solid var(--line);border-radius:999px;padding:5px 11px;white-space:nowrap}
+.schip b{font-weight:900;color:#0f172a}
+.schip i{width:8px;height:8px;border-radius:50%;background:#cbd5e1;display:inline-block}
+.schip.ok i{background:var(--green)}.schip.bad i{background:var(--red)}.schip.warn i{background:var(--red)}
+.schip.warn{cursor:pointer}
+.schip.warn.hot{background:#fee2e2;border-color:#fca5a5;color:#b91c1c}
+.schip.warn.hot b{color:#b91c1c}
+.schip.warn.on{background:var(--red);border-color:var(--red);color:#fff}.schip.warn.on b,.schip.warn.on i{color:#fff;background:#fff}
+.schip.src{color:var(--teal-d);background:#f0faf9;border-color:#a7f3e6}
+.pbar{position:relative;height:16px;border-radius:999px;background:#eef2f6;overflow:hidden}
+.pfill{height:100%;border-radius:999px;width:0;transition:width .9s cubic-bezier(.4,0,.2,1);
+  background:linear-gradient(90deg,#0f9389,#10b981,#34d399);box-shadow:0 1px 6px rgba(16,185,129,.4)}
+.ptick{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.75)}
+.pareas{display:flex;gap:2px;margin-top:7px;height:7px}
+.pseg{border-radius:2px;cursor:pointer;opacity:.85;transition:.15s;min-width:3px}
+.pseg:hover{opacity:1;transform:scaleY(1.5)}
 /* filters */
 .filters{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .f-search{flex:1 1 240px;min-width:180px;border:1.5px solid var(--line);border-radius:10px;padding:9px 13px;font-size:13.5px;outline:none}
@@ -205,6 +226,12 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .wl-ev b{color:#475569;font-weight:700}
 .wl-tk a{font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;text-decoration:none;background:#eef2ff;color:#3730a3;padding:3px 8px;border-radius:7px;white-space:nowrap}
 .wl-tk .none{color:#cbd5e1;font-size:11px}
+/* a missing client evidence link is flagged red; if FIB status says Done it pulses */
+.wl-tk .none.warn{color:#dc2626;font-weight:800;background:#fee2e2;border:1px solid #fca5a5;
+  padding:2px 8px;border-radius:7px;display:inline-block;font-size:10.5px}
+@keyframes noLinkPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.55)}50%{box-shadow:0 0 0 7px rgba(220,38,38,0)}}
+.wl-tk .none.warn.pulse{animation:noLinkPulse 1.7s ease-out infinite}
+tr.needs-ev td{background:#fffafa}
 .cl-chip{display:inline-block;font-family:ui-monospace,monospace;font-size:11.5px;font-weight:800;text-decoration:none;
   background:#ecfeff;color:#0e7490;padding:3px 8px;border-radius:7px;margin-right:4px;border:1px solid #a5f3fc}
 .cl-chip:hover{background:#cffafe}
@@ -285,16 +312,24 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
       <div><div class="brand-t">PCI DSS Compliance Cockpit</div><div class="brand-s" id="proj"></div></div></div>
     <div class="gen" id="gen"></div>
   </div>
-  <!-- compact remediation strip -->
+  <!-- remediation progress -->
   <div class="strip">
-    <div class="strip-pct"><span id="gap-pct">0%</span><small>remediated</small></div>
-    <div class="strip-bar"><i id="gap-barfill"></i></div>
-    <div class="strip-nums">
-      <span class="sn"><b id="sn-closed">0</b> closed</span>
-      <span class="sn"><b id="sn-open" style="color:var(--red)">0</b> open</span>
-      <span class="sn"><b id="sn-total">0</b> findings</span>
-      <span class="sn" id="gap-src">—</span>
+    <div class="strip-head">
+      <div class="strip-left">
+        <div class="strip-pct"><span id="gap-pct">0%</span></div>
+        <div class="strip-lbl">Gap remediation<small><b id="sn-closed">0</b> of <b id="sn-total">0</b> findings closed</small></div>
+      </div>
+      <div class="strip-chips">
+        <span class="schip ok"><i></i><b id="sn-closed2">0</b> closed</span>
+        <span class="schip bad"><i></i><b id="sn-open">0</b> open</span>
+        <span class="schip warn" id="chip-noev" onclick="toggleNoEv()"
+              title="Marked Done in FIB status but no client evidence link — click to filter"><i></i><b id="sn-noev">0</b> done, no link</span>
+        <span class="schip src" id="gap-src">—</span>
+      </div>
     </div>
+    <div class="pbar"><div class="pfill" id="gap-barfill"></div>
+      <i class="ptick" style="left:25%"></i><i class="ptick" style="left:50%"></i><i class="ptick" style="left:75%"></i></div>
+    <div class="pareas" id="pareas" title="Each block is one review area — width = findings, colour = completion"></div>
   </div>
   <!-- findings worklist -->
   <div class="sec">
@@ -573,7 +608,25 @@ async function loadFindingStatuses(){
     renderWorklist();
   }catch(e){}
 }
-let WL_ALL=[], FIB_OPTS=[''], OVERLAY={};
+let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_NOEV=false;
+function toggleNoEv(){
+  WL_NOEV=!WL_NOEV;
+  const c=document.getElementById('chip-noev');
+  c.classList.toggle('on',WL_NOEV); c.classList.toggle('hot',!WL_NOEV&&WL_ALL.some(f=>f._noEv));
+  renderWorklist();
+}
+function refreshNoEv(){
+  WL_ALL.forEach(f=>{ f._noEv=_norm(f.fib_status||'')==='done' && !(f.clients||[]).some(c=>c.v); });
+  const n=WL_ALL.filter(f=>f._noEv).length;
+  const el=document.getElementById('sn-noev'); if(el) el.textContent=n;
+  const c=document.getElementById('chip-noev'); if(c) c.classList.toggle('hot',n>0&&!WL_NOEV);
+}
+function filterArea(name){
+  const sel=document.getElementById('f-area');
+  sel.value=(sel.value===name)?'':name;      // click the same block again to clear
+  renderWorklist();
+  document.getElementById('wl-body').scrollIntoView({block:'nearest'});
+}
 // ── Write an edit back into the Box workbook (FIB Status / Link only) ──
 function toast(msg,bad){
   let t=document.getElementById('toast');
@@ -615,7 +668,7 @@ async function saveCell(i,field,value,el){
     if(field==='client'){ if(f.clients&&f.clients[0]) f.clients[0].v=value; f.client_comments=value; f._pendClient=true; }
     else { f[field]=value; if(field==='link') f.jira=value; }
     if(el) el.disabled=false;
-    updatePendingUI(); renderWorklist();
+    refreshNoEv(); updatePendingUI(); renderWorklist();
     toast('Saved ✓ — everyone sees it now. Download the workbook to push it into Box.');
   }catch(e){ if(el) el.disabled=false; toast('Save failed: '+e.message,1); }
 }
@@ -809,7 +862,7 @@ async function syncFromJira(){
     if(!r.ok) throw new Error(d.message||('HTTP '+r.status));
     changes.forEach(c=>{ c.f.fib_status=c.target; c.f._pendFib=true;
       OVERLAY[ovKey(c.f._sheet,c.f._cFib+c.f._row)]={sheet:c.f._sheet.trim(),cell:c.f._cFib+c.f._row,field:'fib_status',value:c.target}; });
-    updatePendingUI(); renderWorklist();
+    refreshNoEv(); updatePendingUI(); renderWorklist();
     toast('Updated '+d.applied+' FIB statuses from Jira ✓ — download the workbook to push them to Box.');
   }catch(e){ toast('Sync failed: '+e.message,1); }
   btn.disabled=false;
@@ -832,12 +885,18 @@ function editClient(i){
 }
 function renderGaps(){
   const gs=GAPS.summary||{}, areas=GAPS.areas||[];
-  // strip
+  // progress strip
   document.getElementById('gap-pct').textContent=(gs.pct||0)+'%';
-  document.getElementById('gap-barfill').style.width=(gs.pct||0)+'%';
+  setTimeout(()=>{document.getElementById('gap-barfill').style.width=(gs.pct||0)+'%';},60);
   document.getElementById('sn-closed').textContent=(gs.closed||0);
+  document.getElementById('sn-closed2').textContent=(gs.closed||0);
   document.getElementById('sn-open').textContent=(gs.open||0);
   document.getElementById('sn-total').textContent=(gs.total||0);
+  // one block per area: width = number of findings, colour = completion
+  document.getElementById('pareas').innerHTML=areas.map(a=>
+    `<span class="pseg" style="flex:${a.total||1};background:${statusColor(a.pct)}"
+      title="${esc(a.name)} — ${a.closed}/${a.total} closed (${a.pct}%)"
+      onclick="filterArea('${esc(a.name).replace(/'/g,"\\'")}')"></span>`).join('');
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
   WL_ALL.forEach((f,i)=>f._i=i);
@@ -854,6 +913,11 @@ function renderGaps(){
       if(o){ c.v=o.value; f._pendClient=true; if(c.c===f._cClient) f.client_comments=o.value; }
     });
   });
+  // "Done" in FIB status but no client evidence link — the thing to chase
+  WL_ALL.forEach(f=>{ f._noEv=_norm(f.fib_status||'')==='done' && !(f.clients||[]).some(c=>c.v); });
+  const nNoEv=WL_ALL.filter(f=>f._noEv).length;
+  document.getElementById('sn-noev').textContent=nNoEv;
+  document.getElementById('chip-noev').classList.toggle('hot',nNoEv>0&&!WL_NOEV);
   updatePendingUI();
   // FIB status choices = the workbook's own wording, de-duplicated across
   // spelling variants ("In Progress"/"In progress"), keeping the commonest.
@@ -874,6 +938,7 @@ function renderWorklist(){
   const fst=document.getElementById('f-status').value;
   const far=document.getElementById('f-area').value;
   let rows=WL_ALL.filter(f=>{
+    if(WL_NOEV && !f._noEv) return false;
     if(far && f.area!==far) return false;
     if(fst && f.status!==fst) return false;
     if(q){ const hay=(f.area+' '+f.section+' '+f.observation+' '+f.evidence_required+' '+f.recommendation+' '+f.jira+' '+f.fib_status).toLowerCase(); if(!hay.includes(q)) return false; }
@@ -899,7 +964,8 @@ function renderWorklist(){
         ? `<a class="cl-chip" href="${esc(c.v)}" target="_blank" rel="noopener" title="${esc(c.h)}: ${esc(c.v)}" onclick="event.stopPropagation()">${esc(tail)}</a>`
         : `<span class="cl-chip txt" title="${esc(c.h)}: ${esc(c.v)}">${esc(c.v.slice(0,3))}</span>`;
     }).filter(Boolean).join('');
-    const clientCell=(chips||'<span class="none">no link</span>')
+    const noLink=`<span class="none warn${f._noEv?' pulse':''}"${f._noEv?' title="FIB status is Done but no evidence link — add one"':''}>no link</span>`;
+    const clientCell=(chips||noLink)
       +(f._cClient?`<button class="pen" title="Edit client comment link" onclick="event.stopPropagation();editClient(${f._i})">✎</button>`:'')
       +(f._pendClient?'<div class="pendtag">● not in Box yet</div>':'');
     const fs=(f.fib_status||'').toLowerCase();
@@ -910,7 +976,7 @@ function renderWorklist(){
       : `<span class="fib-tag">${esc(f.fib_status||'—')}</span>`)
       +(f._pendFib?'<div class="pendtag">● not in Box yet</div>':'');
     const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
-    return `<tr class="f-open" onclick="this.classList.toggle('exp')">
+    return `<tr class="f-open${f._noEv?' needs-ev':''}" onclick="this.classList.toggle('exp')">
       <td><div class="wl-area">${esc(f.area)}</div></td>
       <td><div class="wl-obs">${sec}${esc(f.observation||'—')}</div>
         ${f.evidence_required?`<div class="wl-ev"><b>Evidence:</b> ${esc(f.evidence_required)}</div>`:''}
