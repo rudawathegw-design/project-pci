@@ -734,7 +734,8 @@ function exportOutlook(){
   body+=`<p style="margin-top:22px">Best regards,<br>PMO — First Iraq Bank</p>
 <p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:8px">
 Generated from the PCI DSS Compliance Cockpit on ${esc2(today)}.</p></div>`;
-  const subject='PCI DSS — '+list.length+' finding'+(list.length>1?'s':'')+' ready for your review and closure';
+  // keep the Subject header pure ASCII — Outlook mangles raw UTF-8 in headers
+  const subject='PCI DSS - '+list.length+' finding'+(list.length>1?'s':'')+' ready for your review and closure';
   const eml=['To: ','Subject: '+subject,'X-Unsent: 1','MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8','Content-Transfer-Encoding: 8bit','',body].join('\r\n');
   const blob=new Blob([eml],{type:'message/rfc822'});
