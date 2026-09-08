@@ -227,6 +227,9 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .schip.fu{cursor:pointer}.schip.fu i{background:#2563eb}
 .schip.fu.hot{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}.schip.fu.hot b{color:#1d4ed8}
 .schip.fu.on{background:#2563eb;border-color:#2563eb;color:#fff}.schip.fu.on b{color:#fff}.schip.fu.on i{background:#fff}
+.schip.tk{cursor:pointer}.schip.tk i{background:#7c3aed}
+.schip.tk.hot{background:#f5f3ff;border-color:#ddd6fe;color:#6d28d9}.schip.tk.hot b{color:#6d28d9}
+.schip.tk.on{background:#7c3aed;border-color:#7c3aed;color:#fff}.schip.tk.on b{color:#fff}.schip.tk.on i{background:#fff}
 /* evidence is in, assessor still Open → nudge them */
 .fu-badge{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:9.5px;font-weight:800;
   letter-spacing:.03em;text-transform:uppercase;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;
@@ -382,10 +385,12 @@ tr.needs-ev td{background:#fffafa}
       <div class="strip-chips">
         <span class="schip ok"><i></i><b id="sn-closed2">0</b> closed</span>
         <span class="schip bad"><i></i><b id="sn-open">0</b> open</span>
-        <span class="schip warn" id="chip-noev" onclick="toggleNoEv()"
+        <span class="schip warn" id="chip-noev" onclick="setQuick('noev')"
               title="Marked Done in FIB status but no client evidence link — click to filter"><i></i><b id="sn-noev">0</b> done, no link</span>
-        <span class="schip fu" id="chip-fu" onclick="toggleFu()"
+        <span class="schip fu" id="chip-fu" onclick="setQuick('fu')"
               title="Evidence uploaded and work in progress, but the assessor still has it Open — click to filter"><i></i><b id="sn-fu">0</b> follow-up</span>
+        <span class="schip tk" id="chip-notk" onclick="setQuick('notk')"
+              title="No Jira ticket linked to this finding — click to filter"><i></i><b id="sn-notk">0</b> no ticket</span>
         <span class="schip src" id="gap-src">—</span>
       </div>
     </div>
@@ -685,7 +690,24 @@ async function loadFindingStatuses(){
     renderWorklist();
   }catch(e){}
 }
-let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_NOEV=false, WL_FU=false, WL_VIEW=[];
+let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_VIEW=[];
+/* one quick-filter at a time: '' | 'noev' | 'fu' | 'notk' */
+let WL_QUICK='';
+const QUICK={noev:{chip:'chip-noev',test:f=>f._noEv},
+             fu:{chip:'chip-fu',  test:f=>f._fu},
+             notk:{chip:'chip-notk',test:f=>f._noTk}};
+function setQuick(k){
+  WL_QUICK = (WL_QUICK===k) ? '' : k;
+  updateQuickChips(); renderWorklist();
+}
+function updateQuickChips(){
+  Object.keys(QUICK).forEach(k=>{
+    const el=document.getElementById(QUICK[k].chip); if(!el) return;
+    const any=WL_ALL.some(QUICK[k].test);
+    el.classList.toggle('on',WL_QUICK===k);
+    el.classList.toggle('hot',WL_QUICK!==k&&any);
+  });
+}
 /* ── Export the current worklist as an Outlook draft (.eml) ──
    Written for the follow-up you actually send: "here is what we have completed,
    please review the evidence and close them". X-Unsent:1 makes Outlook open it
@@ -811,22 +833,6 @@ Generated from the PCI DSS Compliance Cockpit on ${esc2(today)}.</p></div>`;
   downloadEml(subject,body,'PCI action list team '+new Date().toISOString().slice(0,10)+'.eml');
   toast('Outlook draft downloaded ('+list.length+' findings) — open the .eml, add the team and send.');
 }
-function toggleNoEv(){
-  WL_NOEV=!WL_NOEV; if(WL_NOEV) WL_FU=false;
-  const c=document.getElementById('chip-noev');
-  c.classList.toggle('on',WL_NOEV); c.classList.toggle('hot',!WL_NOEV&&WL_ALL.some(f=>f._noEv));
-  const g=document.getElementById('chip-fu');
-  g.classList.remove('on'); g.classList.toggle('hot',WL_ALL.some(f=>f._fu));
-  renderWorklist();
-}
-function toggleFu(){
-  WL_FU=!WL_FU; if(WL_FU) WL_NOEV=false;
-  const c=document.getElementById('chip-fu');
-  c.classList.toggle('on',WL_FU); c.classList.toggle('hot',!WL_FU&&WL_ALL.some(f=>f._fu));
-  const g=document.getElementById('chip-noev');
-  g.classList.remove('on'); g.classList.toggle('hot',WL_ALL.some(f=>f._noEv));
-  renderWorklist();
-}
 // One-click chase: ask the assessor to re-review the evidence already uploaded.
 function followUp(i){
   const f=WL_ALL[i]; if(!f) return;
@@ -845,6 +851,7 @@ function refreshNoEv(){
     const moving=_norm(f.fib_status||'')==='inprogress' ||
                  (live && live.category!=='done' && /progress/i.test(live.status||''));
     f._fu=hasEv && moving && _norm(f.status||'')==='open';
+    f._noTk=!jiraKey(f.jira);                       // no Jira ticket linked yet
   });
   const n=WL_ALL.filter(f=>f._noEv).length;
   const el=document.getElementById('sn-noev'); if(el) el.textContent=n;
@@ -1294,13 +1301,12 @@ function renderGaps(){
     const moving=_norm(f.fib_status||'')==='inprogress' ||
                  (live && live.category!=='done' && /progress/i.test(live.status||''));
     f._fu=hasEv && moving && _norm(f.status||'')==='open';
+    f._noTk=!jiraKey(f.jira);                       // no Jira ticket linked yet
   });
-  const nNoEv=WL_ALL.filter(f=>f._noEv).length;
-  document.getElementById('sn-noev').textContent=nNoEv;
-  document.getElementById('chip-noev').classList.toggle('hot',nNoEv>0&&!WL_NOEV);
-  const nFu=WL_ALL.filter(f=>f._fu).length;
-  document.getElementById('sn-fu').textContent=nFu;
-  document.getElementById('chip-fu').classList.toggle('hot',nFu>0&&!WL_FU);
+  document.getElementById('sn-noev').textContent=WL_ALL.filter(f=>f._noEv).length;
+  document.getElementById('sn-fu').textContent=WL_ALL.filter(f=>f._fu).length;
+  document.getElementById('sn-notk').textContent=WL_ALL.filter(f=>f._noTk).length;
+  updateQuickChips();
   updatePendingUI();
   // FIB status choices = the workbook's own wording, de-duplicated across
   // spelling variants ("In Progress"/"In progress"), keeping the commonest.
@@ -1328,8 +1334,7 @@ function renderWorklist(){
   const far=document.getElementById('f-area').value;
   const ffib=document.getElementById('f-fib').value;
   let rows=WL_ALL.filter(f=>{
-    if(WL_NOEV && !f._noEv) return false;
-    if(WL_FU && !f._fu) return false;
+    if(WL_QUICK && !QUICK[WL_QUICK].test(f)) return false;
     if(far && f.area!==far) return false;
     if(fst && f.status!==fst) return false;
     if(ffib){ const cur=(f.fib_status||'').trim()||'—'; if(cur!==ffib) return false; }
