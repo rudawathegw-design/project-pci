@@ -304,6 +304,7 @@ export default {
         color: /^#[0-9a-fA-F]{6}$/.test(String(p.color || "")) ? p.color : "#0f9389",
         status: ["todo", "doing", "done"].includes(p.status) ? p.status : "todo",
         flag: !!p.flag,
+        metric: p.metric === "gaps" ? "gaps" : undefined,
       }));
       await env.BOXTOK.put(PH_KEY, JSON.stringify(clean));
       return json(200, { ok: true, count: clean.length });

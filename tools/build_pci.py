@@ -251,6 +251,16 @@ h1,h2,h3{margin:0}a{color:var(--teal-d)}
 .ph.flag .ph-dot{border-color:var(--teal);background:#fff;font-size:14px}
 .ph.flag.done .ph-dot{background:var(--teal);border-color:var(--teal)}
 .ph-body{margin-top:34px}
+.ph.has-ring .ph-body{margin-top:52px}
+/* the phase that carries live progress: a ring showing its real percentage */
+.ph-ring{position:absolute;top:-13px;left:50%;transform:translateX(-50%);width:54px;height:54px;border-radius:50%;
+  z-index:3;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--p)*1%),#e5edf5 0);
+  animation:phGlow 2.6s ease-in-out infinite}
+.ph-ring i{width:42px;height:42px;border-radius:50%;background:#fff;display:grid;place-items:center;
+  font-style:normal;font-weight:900;font-size:13.5px;letter-spacing:-.02em;color:var(--c)}
+@keyframes phGlow{0%,100%{box-shadow:0 4px 14px rgba(15,31,58,.14)}50%{box-shadow:0 6px 26px var(--gl)}}
+.ph.metric::before{background:linear-gradient(90deg,var(--green) var(--fill),#e2e8f0 var(--fill))}
+.ph-metric{font-size:10.5px;font-weight:800;color:var(--c2);margin-top:4px;letter-spacing:.01em}
 .ph-t{font-size:12.5px;font-weight:800;color:#334155;line-height:1.25;word-break:break-word}
 .ph-n{font-size:10.5px;color:var(--sub);margin-top:3px;line-height:1.35;white-space:pre-wrap;word-break:break-word}
 .ph-s{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
@@ -893,7 +903,7 @@ const PH_COLORS=['#0f9389','#2563eb','#7c3aed','#db2777','#f59e0b','#ef4444','#0
 const PH_DEFAULT=[
   {id:'p1',title:'Initiation',      note:'Kick-off, scope & team',        color:'#0f9389',status:'done'},
   {id:'p2',title:'Gap Assessment',  note:'Assessor review of all areas',  color:'#2563eb',status:'doing'},
-  {id:'p3',title:'Remediation',     note:'Close findings, collect evidence',color:'#7c3aed',status:'todo'},
+  {id:'p3',title:'Remediation',     note:'Close findings, collect evidence',color:'#7c3aed',status:'todo',metric:'gaps'},
   {id:'p4',title:'Validation',      note:'Assessor re-check & sign-off',  color:'#f59e0b',status:'todo'},
   {id:'pf',title:'Certified',       note:'PCI DSS certification achieved',color:'#0f9389',status:'todo',flag:true},
 ];
@@ -904,6 +914,11 @@ async function loadPhases(){
     if(r.ok){ const d=await r.json(); PHASES=(d.phases&&d.phases.length)?d.phases:PH_DEFAULT.slice(); }
   }catch(e){}
   if(!PHASES) PHASES=PH_DEFAULT.slice();
+  // first run on an existing roadmap: bind the live gap % to Remediation
+  if(!PHASES.some(x=>x.metric)){
+    const t=PHASES.find(x=>/remediat/i.test(x.title))||PHASES.find(x=>x.status==='doing'&&!x.flag);
+    if(t){ t.metric='gaps'; savePhases(); }
+  }
   renderChain();
 }
 async function savePhases(){
@@ -922,15 +937,23 @@ function renderChain(){
   if(fi>=0&&fi!==PHASES.length-1) PHASES.push(PHASES.splice(fi,1)[0]);
   const lastDone=PHASES.reduce((a,p,i)=>p.status==='done'?i:a,-1);
   const label={todo:'Not started',doing:'In progress',done:'Done'};
+  const gs=(GAPS&&GAPS.summary)||{};
   el.innerHTML=PHASES.map((p,i)=>{
     const done=p.status==='done';
     const lit=i<=lastDone;                       // green line up to the last completed phase
     const mark=p.flag?'⚑':(done?'✓':(p.status==='doing'?'●':i+1));
     const dot=done?'':`style="border-color:${esc(p.color)};color:${esc(p.color)}"`;
-    return `<div class="ph ${done?'done':''} ${lit?'lit':''} ${p.flag?'flag':''}" draggable="true" data-i="${i}"
+    // a phase can be bound to a live figure — gap remediation drives Remediation
+    const hasM=p.metric==='gaps'&&gs.total;
+    const pct=hasM?(gs.pct||0):0;
+    const ring=hasM?`<div class="ph-ring" style="--p:${pct};--c:${esc(p.color)};--gl:${esc(p.color)}66"><i>${pct}%</i></div>`
+                   :`<div class="ph-dot" ${dot}>${mark}</div>`;
+    return `<div class="ph ${done?'done':''} ${lit?'lit':''} ${p.flag?'flag':''} ${hasM?'metric has-ring':''}"
+              style="--fill:${pct}%;--c2:${esc(p.color)}" draggable="true" data-i="${i}"
               onclick="editPhase(${i})" title="Click to edit · drag to reorder">
-      <div class="ph-dot" ${dot}>${mark}</div>
+      ${ring}
       <div class="ph-body"><div class="ph-t">${esc(p.title)}</div>
+        ${hasM?`<div class="ph-metric">${gs.closed||0} of ${gs.total||0} findings closed</div>`:''}
         ${p.note?`<div class="ph-n">${esc(p.note)}</div>`:''}
         <span class="ph-s" ${done?'style="background:#dcfce7;color:#166534"':(p.status==='doing'?`style="background:${esc(p.color)}1a;color:${esc(p.color)}"`:'')}>${label[p.status]}</span>
       </div></div>`;
@@ -976,6 +999,11 @@ function editPhase(i){
       <option value="doing"${p.status==='doing'?' selected':''}>In progress</option>
       <option value="done"${p.status==='done'?' selected':''}>Done (bullet turns green)</option>
     </select>
+    <label class="flab">Live progress</label>
+    <select id="ph-metric" class="fld">
+      <option value=""${p.metric!=='gaps'?' selected':''}>None — plain phase</option>
+      <option value="gaps"${p.metric==='gaps'?' selected':''}>Gap remediation % (live from Box)</option>
+    </select>
     <label class="flab">Colour</label>
     <div class="sw" id="ph-sw">${PH_COLORS.map(c=>`<b data-c="${c}" style="background:${c}" class="${c===p.color?'on':''}" onclick="phPick(this)"></b>`).join('')}</div>
     <div class="f-links" style="margin-top:20px">
@@ -992,6 +1020,8 @@ function phSave(i){
   p.title=(document.getElementById('ph-title').value||'Phase').trim().slice(0,80);
   p.note=(document.getElementById('ph-note').value||'').trim().slice(0,400);
   p.status=document.getElementById('ph-status').value;
+  const mv=document.getElementById('ph-metric');
+  if(mv){ p.metric=mv.value||undefined; if(p.metric) PHASES.forEach((x,j)=>{ if(j!==i&&x.metric===p.metric) delete x.metric; }); }
   const sw=document.querySelector('#ph-sw b.on'); if(sw) p.color=sw.dataset.c;
   closeOv(); renderChain(); savePhases();
 }
@@ -1286,6 +1316,7 @@ function renderGaps(){
   document.getElementById('sn-closed2').textContent=(gs.closed||0);
   document.getElementById('sn-open').textContent=(gs.open||0);
   document.getElementById('sn-total').textContent=(gs.total||0);
+  if(PHASES) renderChain();               // ring follows the live gap figure
   // flatten findings into one worklist
   WL_ALL=[]; areas.forEach(a=>(a.findings||[]).forEach((f,i)=>WL_ALL.push(Object.assign({},f,{area:a.name,n:i+1}))));
   WL_ALL.forEach((f,i)=>f._i=i);
