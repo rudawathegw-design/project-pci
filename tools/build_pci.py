@@ -603,12 +603,29 @@ function parseGaps(wb){
     if(hi<0) continue;
     const hdr=rows[hi].map(c=>norm(c).toLowerCase());
     const col=(...names)=>{ for(let j=0;j<hdr.length;j++) if(names.some(nm=>hdr[j].includes(nm))) return j; return -1; };
-    const ci={section:col('section'),obs:col('observation'),rec:col('recommendation'),ev:col('evidence req','evidence'),status:col('status'),assessor:col('assessor'),client:col('client comment'),fib:col('fib status'),link:col('link')};
-    const srCol=hdr.findIndex(h=>/^sr\.?\s*no/i.test(h));
-    // Any column headed "Client Comments" is an evidence slot — however many
-    // exist. Detected by name, so new ones added to the workbook just appear.
+    // Columns are matched by HEADER NAME, never by position, so the workbook's
+    // columns can be reordered freely. Matching is careful about overlaps:
+    // "FIB Status" also contains "status", and an evidence/link header can sit
+    // on a Client Comments column - so exact names win and clients are excluded.
     const clientIdx=hdr.map((h,j)=>/client\s*comment/i.test(h)?j:-1).filter(j=>j>=0);
-    if(clientIdx.length) ci.client=clientIdx[0];
+    const isCli=j=>clientIdx.includes(j);
+    const pick=(exact,loose,bad)=>{
+      let j=hdr.findIndex((h,k)=>!isCli(k)&&exact.some(n=>h===n));            // exact header
+      if(j<0) j=hdr.findIndex((h,k)=>!isCli(k)&&exact.some(n=>h.includes(n))); // contains the full phrase
+      if(j<0&&loose) j=hdr.findIndex((h,k)=>!isCli(k)&&loose.some(n=>h.includes(n))
+                                            &&!(bad||[]).some(n=>h.includes(n)));
+      return j;
+    };
+    const ci={
+      section:col('section'), obs:col('observation'), rec:col('recommendation'),
+      ev:     pick(['evidence required','evidence req'],['evidence'],['client']),
+      status: pick(['status'],['status'],['fib','client']),     // never the FIB column
+      assessor:col('assessor'),
+      client: clientIdx.length?clientIdx[0]:-1,
+      fib:    pick(['fib status'],['fib'],[]),
+      link:   pick(['link'],['jira','ticket'],['client']),
+    };
+    const srCol=hdr.findIndex(h=>/^sr\.?\s*no/i.test(h));
     // Some sheets leave the FIB Status / Link headers blank (HR, SIEM). Infer
     // those columns from the data so they stay editable instead of turning up
     // as an unnamed "Column I".
