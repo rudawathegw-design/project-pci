@@ -441,18 +441,15 @@ tr.needs-ev td{background:#fffafa}
   <!-- latest activity on the epic -->
   <div class="sec" id="act-sec" style="display:none">
     <div class="sec-h"><div class="sec-t">Latest activity <small id="act-sub">FIBXPI-49 · status changes, edits &amp; comments</small></div>
-      <div class="act-filters" id="act-filters" style="display:none">
+      <div class="act-filters">
         <button class="afb on" onclick="actFilter(this,'')">All</button>
         <button class="afb" onclick="actFilter(this,'comment')">💬 Comments</button>
         <button class="afb" onclick="actFilter(this,'status')">✓ Status</button>
         <button class="afb" onclick="actFilter(this,'edit')">✎ Edits</button>
         <button class="afb bot on" id="act-bot" onclick="actBots(this)">🤖 Automation hidden</button>
-      </div>
-      <button class="afb" id="act-toggle" onclick="actToggle()">&#9656; Show</button></div>
-    <div id="act-body" style="display:none">
-      <div class="act" id="act-list"></div>
-      <div style="text-align:center;margin-top:14px"><button class="cbtn" id="act-more" onclick="actMore()" style="display:none">Show more</button></div>
-    </div>
+      </div></div>
+    <div class="act" id="act-list"></div>
+    <div style="text-align:center;margin-top:14px"><button class="cbtn" id="act-more" onclick="actMore()" style="display:none">Show more</button></div>
   </div>
   <div class="foot">First Iraq Bank · PCI DSS Compliance Cockpit · generated <span id="gen2"></span></div>
 </div></div>
@@ -497,7 +494,7 @@ function playIntro(){
   v.play().catch(()=>{}); v.addEventListener('ended',fin); setTimeout(fin,9000);
 }
 function endIntro(){ const w=document.getElementById('intro'); w.style.transition='opacity .5s'; w.style.opacity='0';
-  setTimeout(()=>{ w.style.display='none'; document.getElementById('app').style.display='block'; loadLive(); },500); }
+  setTimeout(()=>{ w.style.display='none'; document.getElementById('app').style.display='block'; },500); }
 function statusColor(p){ return p>=80?'var(--green)':p>=40?'var(--amber)':'var(--red)'; }
 function jiraKey(u){ const m=/([A-Z]+-\d+)/.exec(u||''); return m?m[1]:''; }
 const TODAY=new Date().toISOString().slice(0,10);
@@ -511,12 +508,6 @@ function render(){
   document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>
     `<div class="ev-btn" onclick="openEvidence('${e.k}')"><span class="go">↗</span>
        <div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
-}
-// Live loaders run only once the intro is gone: parsing the Box workbook is a
-// long synchronous block that would otherwise drop frames in the intro video.
-let LIVE=false;
-function loadLive(){
-  if(LIVE) return; LIVE=true;
   loadPhases();   // roadmap chain (shared, editable)
   loadGaps();     // live gap workbook from Box → remediation strip + worklist
   loadEpic();     // live Jira epic FIBXPI-49 → team evidence tickets
@@ -542,8 +533,6 @@ async function loadActivity(){
     if(!r.ok) throw new Error('HTTP '+r.status);
     const d=await r.json(); ACT=d.items||[];
     document.getElementById('act-sec').style.display='';
-    let _o='0'; try{ _o=localStorage.getItem('pci_act_open')||'0'; }catch(e){}
-    if(_o==='1') actToggle();
     renderActivity();
   }catch(e){}
 }
@@ -558,14 +547,6 @@ function actBots(btn){
   ACT_N=25; renderActivity();
 }
 function actMore(){ ACT_N+=25; renderActivity(); }
-function actToggle(){
-  const b=document.getElementById('act-body'), t=document.getElementById('act-toggle');
-  const open=b.style.display==='none';
-  b.style.display=open?'':'none';
-  document.getElementById('act-filters').style.display=open?'':'none';
-  t.innerHTML=open?'▾ Hide':'▸ Show';
-  try{ localStorage.setItem('pci_act_open', open?'1':'0'); }catch(e){}
-}
 function renderActivity(){
   const base=ACT.filter(a=>!(ACT_BOT&&a.bot));
   const rows=base.filter(a=>!ACT_K||a.kind===ACT_K);
