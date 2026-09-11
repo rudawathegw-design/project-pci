@@ -304,14 +304,6 @@ tr.needs-ev td{background:#fffafa}
   background:#ecfeff;color:#0e7490;padding:3px 8px;border-radius:7px;margin-right:4px;border:1px solid #a5f3fc}
 .cl-chip:hover{background:#cffafe}
 .cl-chip.txt{background:#f8fafc;color:#64748b;border-color:#e2e8f0;font-family:inherit}
-/* resubmission round: evidence that has been sent back */
-.rnd{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.02em;padding:2px 7px;border-radius:7px;
-  margin-left:3px;vertical-align:middle;cursor:help}
-.rnd.r2{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
-.rnd.r3{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
-.schip.rw{cursor:pointer}.schip.rw i{background:#d97706}
-.schip.rw.hot{background:#fffbeb;border-color:#fcd34d;color:#92400e}.schip.rw.hot b{color:#92400e}
-.schip.rw.on{background:#d97706;border-color:#d97706;color:#fff}.schip.rw.on b{color:#fff}.schip.rw.on i{background:#fff}
 .tk-live{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;margin-top:5px;color:#64748b}
 .tk-dot{width:7px;height:7px;border-radius:50%;background:#f59e0b}
 .tk-live.done .tk-dot{background:#10b981}.tk-live.done{color:#166534}
@@ -407,8 +399,6 @@ tr.needs-ev td{background:#fffafa}
               title="Marked Done in FIB status but no client evidence link — click to filter"><i></i><b id="sn-noev">0</b> done, no link</span>
         <span class="schip fu" id="chip-fu" onclick="setQuick('fu')"
               title="Evidence uploaded and work in progress, but the assessor still has it Open — click to filter"><i></i><b id="sn-fu">0</b> follow-up</span>
-        <span class="schip rw" id="chip-rw" onclick="setQuick('rework')"
-              title="Evidence sent back at least once - these are costing you the most time"><i></i><b id="sn-rw">0</b> resubmitted</span>
         <span class="schip tk" id="chip-notk" onclick="setQuick('notk')"
               title="No Jira ticket linked to this finding — click to filter"><i></i><b id="sn-notk">0</b> no ticket</span>
         <span class="schip src" id="gap-src">—</span>
@@ -696,8 +686,6 @@ function parseGaps(wb){
         evidence_required:_evr,status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
         assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira,
         clients:clientIdx.map(j=>({c:colLetter(j),h:norm(rows[hi][j])||'Client Comments',v:norm(r[j])})),
-        _rounds:clientIdx.filter(j=>norm(r[j])).length,
-        assessor_h:ci.assessor>=0?(norm(rows[hi][ci.assessor])||'Assessor'):'Assessor',
         extras,_sheet:sn,_row,_cFib,_cLink,_cClient:clientIdx.length?colLetter(clientIdx[0]):''});
     }
     const key=norm(sn).toLowerCase();
@@ -754,7 +742,6 @@ let WL_ALL=[], FIB_OPTS=[''], OVERLAY={}, WL_VIEW=[];
 let WL_QUICK='';
 const QUICK={noev:{chip:'chip-noev',test:f=>f._noEv},
              fu:{chip:'chip-fu',  test:f=>f._fu},
-             rework:{chip:'chip-rw',test:f=>(f._rounds||0)>=2},
              notk:{chip:'chip-notk',test:f=>f._noTk}};
 function setQuick(k){
   WL_QUICK = (WL_QUICK===k) ? '' : k;
@@ -917,7 +904,6 @@ function refreshNoEv(){
   set('sn-noev',WL_ALL.filter(f=>f._noEv).length);
   set('sn-fu',  WL_ALL.filter(f=>f._fu).length);
   set('sn-notk',WL_ALL.filter(f=>f._noTk).length);
-  set('sn-rw',  WL_ALL.filter(f=>(f._rounds||0)>=2).length);
   updateQuickChips();
 }
 function filterArea(name){
@@ -1398,7 +1384,6 @@ function renderGaps(){
   document.getElementById('sn-noev').textContent=WL_ALL.filter(f=>f._noEv).length;
   document.getElementById('sn-fu').textContent=WL_ALL.filter(f=>f._fu).length;
   document.getElementById('sn-notk').textContent=WL_ALL.filter(f=>f._noTk).length;
-  document.getElementById('sn-rw').textContent=WL_ALL.filter(f=>(f._rounds||0)>=2).length;
   updateQuickChips();
   updatePendingUI();
   // FIB status choices = the workbook's own wording, de-duplicated across
@@ -1457,11 +1442,8 @@ function renderWorklist(){
         ? `<a class="cl-chip" href="${esc(c.v)}" target="_blank" rel="noopener" title="${esc(c.h)}: ${esc(c.v)}" onclick="event.stopPropagation()">${esc(tail)}</a>`
         : `<span class="cl-chip txt" title="${esc(c.h)}: ${esc(c.v)}">${esc(c.v.slice(0,3))}</span>`;
     }).filter(Boolean).join('');
-    const rnd=(f._rounds>=2)
-      ? `<span class="rnd r${Math.min(f._rounds,3)}" title="Evidence resubmitted ${f._rounds} times - it has been sent back ${f._rounds-1} time(s). Consider a call instead of another upload.">R${f._rounds}</span>`
-      : '';
     const noLink=`<span class="none warn${f._noEv?' pulse':''}"${f._noEv?' title="FIB status is Done but no evidence link — add one"':''}>no link</span>`;
-    const clientCell=(chips||noLink)+rnd
+    const clientCell=(chips||noLink)
       +((f.clients||[]).length?(()=>{const e=f.clients.find(c=>!c.v);
           return `<button class="pen" title="${e?('Add evidence link to '+(e.h||'Client Comments')+' (column '+e.c+')'):'Edit evidence link'}" onclick="event.stopPropagation();editClient(${f._i})">✎</button>`;})():'')
       +(f._pendClient?'<div class="pendtag">● not in Box yet</div>':'');
@@ -1480,15 +1462,13 @@ function renderWorklist(){
         ${f.evidence_required&&f.observation?`<div class="wl-ev"><b>Evidence:</b> ${esc(f.evidence_required)}</div>`:''}
         <div class="wl-more">
           ${f.recommendation?`<div class="m1"><b>Recommendation:</b> ${esc(f.recommendation)}</div>`:''}
-          ${f.assessor_comments?`<div class="m1" style="color:#64748b"><b>${esc(f.assessor_h||'Assessor')}:</b> ${esc(f.assessor_comments)}</div>`:''}
+          ${f.assessor_comments?`<div class="m1" style="color:#64748b"><b>Assessor:</b> ${esc(f.assessor_comments)}</div>`:''}
           ${(f.clients||[]).map(c=>{
             const val=c.v?(/^https?:\/\//i.test(c.v)
               ? `<a href="${esc(c.v)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.v.length>64?c.v.slice(0,64)+'…':c.v)}</a>`
               : esc(c.v))
               : '<span style="color:#cbd5e1">empty</span>';
-            const done=f.clients.filter(x=>x.v);
-            const lbl=c.v?('Round '+(done.indexOf(c)+1)):'Next slot';
-            return `<div class="m1 mx"><b>${esc(lbl)} - ${esc(c.h)} (${esc(c.c)}):</b> ${val}
+            return `<div class="m1 mx"><b>${esc(c.h)} (${esc(c.c)}):</b> ${val}
               <button class="pen" onclick="event.stopPropagation();editClient(${f._i},'${esc(c.c)}')">✎</button></div>`;
           }).join('')}
           ${(f.extras||[]).map(x=>{
