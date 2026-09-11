@@ -605,12 +605,17 @@ function parseGaps(wb){
     const col=(...names)=>{ for(let j=0;j<hdr.length;j++) if(names.some(nm=>hdr[j].includes(nm))) return j; return -1; };
     const ci={section:col('section'),obs:col('observation'),rec:col('recommendation'),ev:col('evidence req','evidence'),status:col('status'),assessor:col('assessor'),client:col('client comment'),fib:col('fib status'),link:col('link')};
     const srCol=hdr.findIndex(h=>/^sr\.?\s*no/i.test(h));
+    // Any column headed "Client Comments" is an evidence slot — however many
+    // exist. Detected by name, so new ones added to the workbook just appear.
+    const clientIdx=hdr.map((h,j)=>/client\s*comment/i.test(h)?j:-1).filter(j=>j>=0);
+    if(clientIdx.length) ci.client=clientIdx[0];
     // Some sheets leave the FIB Status / Link headers blank (HR, SIEM). Infer
     // those columns from the data so they stay editable instead of turning up
     // as an unnamed "Column I".
     const dataRows=rows.slice(hi+1);
     if(ci.fib<0||ci.link<0){
-      const taken=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.client,srCol].filter(x=>x>=0));
+      const taken=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,srCol]
+        .concat(clientIdx).filter(x=>x>=0));
       const nk=s=>String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,'');
       const STAT=new Set(['done','inprogress','onhold','notstarted','completed','pending','na']);
       const width=Math.max(hdr.length,...dataRows.map(r=>r.length),0);
@@ -625,10 +630,6 @@ function parseGaps(wb){
       if(ci.fib<0){ const j=best(st,2); if(j>=0) ci.fib=j; }
       if(ci.link<0){ const j=best(lk,1); if(j>=0) ci.link=j; }
     }
-    // Every "Client Comments" column (HR has two) gets its own compact chip
-    // column next to the ticket, so they're excluded from the extras list.
-    const clientIdx=hdr.map((h,j)=>/client\s*comment/i.test(h)?j:-1).filter(j=>j>=0);
-    if(clientIdx.length) ci.client=clientIdx[0];
     // Columns already rendered in their own place; everything else that carries
     // text (Additional Comments, Evidences1/2 …) is surfaced as "extras".
     const used=new Set([ci.section,ci.obs,ci.rec,ci.ev,ci.status,ci.assessor,ci.fib,ci.link,srCol]
@@ -1079,9 +1080,9 @@ function updatePendingUI(){
   document.getElementById('wl-export').style.display=n?'':'none';
   document.getElementById('wl-clear').style.display=n?'':'none';
 }
-async function saveCell(i,field,value,el){
+async function saveCell(i,field,value,el,colOverride){
   const f=WL_ALL[i]; if(!f) return;
-  const col=field==='fib_status'?f._cFib:(field==='client'?f._cClient:f._cLink);
+  const col=colOverride||(field==='fib_status'?f._cFib:(field==='client'?f._cClient:f._cLink));
   if(!col){ toast('That column does not exist in this sheet.',1); return; }
   const prev=f[field]||'';
   const pw=sessionStorage.getItem('pci_pw')||'';
@@ -1095,7 +1096,11 @@ async function saveCell(i,field,value,el){
       toast('Save failed: '+(d.message||('HTTP '+r.status)),1); return;
     }
     OVERLAY[ovKey(f._sheet,col+f._row)]={sheet:f._sheet.trim(),cell:col+f._row,field,value};
-    if(field==='client'){ if(f.clients&&f.clients[0]) f.clients[0].v=value; f.client_comments=value; f._pendClient=true; }
+    if(field==='client'){
+      const slot=(f.clients||[]).find(c=>c.c===col); if(slot) slot.v=value;
+      if(col===f._cClient) f.client_comments=value;
+      f._pendClient=true;
+    }
     else { f[field]=value; if(field==='link') f.jira=value; }
     if(el) el.disabled=false;
     refreshNoEv(); updatePendingUI(); renderWorklist();
@@ -1306,13 +1311,17 @@ function editTicket(i){
   if(val && /^[A-Za-z]+-\d+$/.test(val)) val='https://fibtask.atlassian.net/browse/'+val.toUpperCase();
   saveCell(i,'link',val,null);
 }
-function editClient(i){
-  const f=WL_ALL[i]; if(!f||!f._cClient) return;
-  const cur=(f.clients&&f.clients[0]&&f.clients[0].v)||'';
-  const v=prompt('Client comment / evidence link (paste the full URL — the table shows only its last 3 characters).\nLeave empty to clear.',cur);
+function editClient(i,col){
+  const f=WL_ALL[i]; if(!f||!(f.clients||[]).length) return;
+  // with several Client Comments columns, add to the first empty slot so a new
+  // link lands in a new column instead of overwriting an existing one
+  const slot=(col&&f.clients.find(c=>c.c===col))||f.clients.find(c=>!c.v)||f.clients[f.clients.length-1];
+  const many=f.clients.length>1;
+  const v=prompt('Evidence link for "'+(slot.h||'Client Comments')+'"'+(many?' (column '+slot.c+' of '+f.clients.length+')':'')+'\n\nPaste the full URL - the table shows only its last 3 characters.\nLeave empty to clear.', slot.v||'');
   if(v===null) return;
-  saveCell(i,'client',v.trim(),null);
+  saveCell(i,'client',v.trim(),null,slot.c);
 }
+
 function renderGaps(){
   const gs=GAPS.summary||{}, areas=GAPS.areas||[];
   // progress strip
@@ -1418,7 +1427,8 @@ function renderWorklist(){
     }).filter(Boolean).join('');
     const noLink=`<span class="none warn${f._noEv?' pulse':''}"${f._noEv?' title="FIB status is Done but no evidence link — add one"':''}>no link</span>`;
     const clientCell=(chips||noLink)
-      +(f._cClient?`<button class="pen" title="Edit client comment link" onclick="event.stopPropagation();editClient(${f._i})">✎</button>`:'')
+      +((f.clients||[]).length?(()=>{const e=f.clients.find(c=>!c.v);
+          return `<button class="pen" title="${e?('Add evidence link to '+(e.h||'Client Comments')+' (column '+e.c+')'):'Edit evidence link'}" onclick="event.stopPropagation();editClient(${f._i})">✎</button>`;})():'')
       +(f._pendClient?'<div class="pendtag">● not in Box yet</div>':'');
     const fs=(f.fib_status||'').toLowerCase();
     const fcls=fs.includes('done')?' v-done':(fs.includes('progress')?' v-prog':(fs.includes('hold')?' v-hold':(fs.includes('not start')?' v-todo':'')));
@@ -1436,6 +1446,14 @@ function renderWorklist(){
         <div class="wl-more">
           ${f.recommendation?`<div class="m1"><b>Recommendation:</b> ${esc(f.recommendation)}</div>`:''}
           ${f.assessor_comments?`<div class="m1" style="color:#64748b"><b>Assessor:</b> ${esc(f.assessor_comments)}</div>`:''}
+          ${(f.clients||[]).map(c=>{
+            const val=c.v?(/^https?:\/\//i.test(c.v)
+              ? `<a href="${esc(c.v)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.v.length>64?c.v.slice(0,64)+'…':c.v)}</a>`
+              : esc(c.v))
+              : '<span style="color:#cbd5e1">empty</span>';
+            return `<div class="m1 mx"><b>${esc(c.h)} (${esc(c.c)}):</b> ${val}
+              <button class="pen" onclick="event.stopPropagation();editClient(${f._i},'${esc(c.c)}')">✎</button></div>`;
+          }).join('')}
           ${(f.extras||[]).map(x=>{
             const link=/^https?:\/\//i.test(x.v);
             const val=link?`<a href="${esc(x.v)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(x.v.length>70?x.v.slice(0,70)+'…':x.v)}</a>`:esc(x.v);
