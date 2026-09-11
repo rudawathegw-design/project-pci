@@ -497,7 +497,7 @@ function playIntro(){
   v.play().catch(()=>{}); v.addEventListener('ended',fin); setTimeout(fin,9000);
 }
 function endIntro(){ const w=document.getElementById('intro'); w.style.transition='opacity .5s'; w.style.opacity='0';
-  setTimeout(()=>{ w.style.display='none'; document.getElementById('app').style.display='block'; },500); }
+  setTimeout(()=>{ w.style.display='none'; document.getElementById('app').style.display='block'; loadLive(); },500); }
 function statusColor(p){ return p>=80?'var(--green)':p>=40?'var(--amber)':'var(--red)'; }
 function jiraKey(u){ const m=/([A-Z]+-\d+)/.exec(u||''); return m?m[1]:''; }
 const TODAY=new Date().toISOString().slice(0,10);
@@ -511,6 +511,12 @@ function render(){
   document.getElementById('ev-row').innerHTML=EVIDENCE.map(e=>
     `<div class="ev-btn" onclick="openEvidence('${e.k}')"><span class="go">↗</span>
        <div class="t">${esc(e.t)}</div><div class="s">${esc(e.s)}</div></div>`).join('');
+}
+// Live loaders run only once the intro is gone: parsing the Box workbook is a
+// long synchronous block that would otherwise drop frames in the intro video.
+let LIVE=false;
+function loadLive(){
+  if(LIVE) return; LIVE=true;
   loadPhases();   // roadmap chain (shared, editable)
   loadGaps();     // live gap workbook from Box → remediation strip + worklist
   loadEpic();     // live Jira epic FIBXPI-49 → team evidence tickets
