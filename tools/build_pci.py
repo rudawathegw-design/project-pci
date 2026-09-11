@@ -644,7 +644,13 @@ function parseGaps(wb){
       const _st=ci.status>=0?norm(r[ci.status]).toLowerCase():'';
       if(_st.includes('clos')) cCount++; else if(_st.includes('open')) oCount++;
       const section=ci.section>=0?norm(r[ci.section]):'', obs=ci.obs>=0?norm(r[ci.obs]):'';
-      if(!section&&!obs) continue;
+      const _rec=ci.rec>=0?norm(r[ci.rec]):'', _evr=ci.ev>=0?norm(r[ci.ev]):'';
+      const _cli=clientIdx.some(j=>norm(r[j]));
+      const _jir=r.some(c=>/atlassian\.net\/browse\//.test(norm(c)));
+      // Keep any row that carries real content. Some findings leave Section and
+      // Key Observations blank and describe the requirement under Evidence
+      // Required only — those were previously dropped from the worklist.
+      if(!section&&!obs&&!_rec&&!_evr&&!_st&&!_cli&&!_jir) continue;
       // exact spreadsheet coordinates so edits can be written back to Box
       const _row=hi+_k+2, _cFib=ci.fib>=0?colLetter(ci.fib):'', _cLink=ci.link>=0?colLetter(ci.link):'';
       const stRaw=ci.status>=0?norm(r[ci.status]).toLowerCase():'';
@@ -658,8 +664,8 @@ function parseGaps(wb){
         const h=norm(rows[hi][j])||('Column '+colLetter(j));
         extras.push({h,v});
       }
-      findings.push({section,observation:obs,recommendation:ci.rec>=0?norm(r[ci.rec]):'',
-        evidence_required:ci.ev>=0?norm(r[ci.ev]):'',status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
+      findings.push({section,observation:obs,recommendation:_rec,
+        evidence_required:_evr,status,fib_status:ci.fib>=0?norm(r[ci.fib]):'',
         assessor_comments:ci.assessor>=0?norm(r[ci.assessor]):'',client_comments:ci.client>=0?norm(r[ci.client]):'',jira,
         clients:clientIdx.map(j=>({c:colLetter(j),h:norm(rows[hi][j])||'Client Comments',v:norm(r[j])})),
         extras,_sheet:sn,_row,_cFib,_cLink,_cClient:clientIdx.length?colLetter(clientIdx[0]):''});
@@ -1425,8 +1431,8 @@ function renderWorklist(){
     const sec=f.section?`<span style="color:#64748b">${esc(f.section)} · </span>`:'';
     return `<tr class="f-open${f._noEv?' needs-ev':''}" onclick="this.classList.toggle('exp')">
       <td><div class="wl-area">${esc(f.area)}</div></td>
-      <td><div class="wl-obs">${sec}${esc(f.observation||'—')}</div>
-        ${f.evidence_required?`<div class="wl-ev"><b>Evidence:</b> ${esc(f.evidence_required)}</div>`:''}
+      <td><div class="wl-obs">${sec}${esc(f.observation||f.recommendation||f.evidence_required||'—')}</div>
+        ${f.evidence_required&&f.observation?`<div class="wl-ev"><b>Evidence:</b> ${esc(f.evidence_required)}</div>`:''}
         <div class="wl-more">
           ${f.recommendation?`<div class="m1"><b>Recommendation:</b> ${esc(f.recommendation)}</div>`:''}
           ${f.assessor_comments?`<div class="m1" style="color:#64748b"><b>Assessor:</b> ${esc(f.assessor_comments)}</div>`:''}
